@@ -14,31 +14,31 @@ import {
   Layers,
   GitFork,
   X,
-  Scale
+  Scale,
+  ExternalLink,
+  FileText,
+  Gavel,
+  BookOpen
 } from "lucide-react"
 import { FileTree, TreeItem } from "@/components/file-tree"
-import { useGraphStore, DecisionNode, Relationship } from "@/lib/store"
+import { useGraphStore, DecisionNode, Relationship, ReferenceItem } from "@/lib/store"
 
 interface PositionedNode extends DecisionNode {
   x: number
   y: number
 }
 
-// 3. MOTOR DE AUTO-LAYOUT COM DAGRE (Crescimento Vertical 'TB')
+// Dagre Layout Engine
 function getLayoutedElements(
   nodes: DecisionNode[],
   edges: Relationship[]
 ): PositionedNode[] {
   const g = new dagre.graphlib.Graph()
   
-  // TB: Top to Bottom layout
-  // nodesep: Horizontal distance between cards
-  // ranksep: Vertical distance between layers
   g.setGraph({ rankdir: "TB", nodesep: 140, ranksep: 100 })
   g.setDefaultEdgeLabel(() => ({}))
 
   nodes.forEach((node) => {
-    // Card is 220px wide and 110px tall
     g.setNode(node.id, { width: 220, height: 110 })
   })
 
@@ -52,7 +52,6 @@ function getLayoutedElements(
     const nodeInfo = g.node(node.id)
     return {
       ...node,
-      // Offset by half dimensions since dagre calculates from center
       x: nodeInfo.x - 110,
       y: nodeInfo.y - 55,
     }
@@ -63,7 +62,6 @@ export default function DecisionTreeDashboard() {
   const router = useRouter()
   const viewportRef = React.useRef<HTMLDivElement>(null)
 
-  // Retrieve global state from Zustand store
   const {
     cases,
     activeCaseId,
@@ -77,7 +75,7 @@ export default function DecisionTreeDashboard() {
     addCustomNode,
   } = useGraphStore()
 
-  // Mouse pan states (Figma hand tool)
+  // Pan states
   const [panX, setPanX] = React.useState(0)
   const [panY, setPanY] = React.useState(0)
   const [isPanning, setIsPanning] = React.useState(false)
@@ -90,7 +88,6 @@ export default function DecisionTreeDashboard() {
 
   const activeCase = cases.find((c) => c.id === activeCaseId) || cases[0]
 
-  // Calculate layouted nodes dynamically using Dagre
   const positionedNodes = React.useMemo(() => {
     return getLayoutedElements(activeCase.nodes, activeCase.edges)
   }, [activeCase.nodes, activeCase.edges])
@@ -108,7 +105,7 @@ export default function DecisionTreeDashboard() {
     }
   }, [activeCaseId])
 
-  // Smooth scroll and focus nodes when selected via layers list or store changes
+  // Center on layer focus
   React.useEffect(() => {
     if (focusedNodeId && viewportRef.current) {
       const node = positionedNodes.find((n) => n.id === focusedNodeId)
@@ -123,7 +120,6 @@ export default function DecisionTreeDashboard() {
     }
   }, [focusedNodeId, positionedNodes])
 
-  // Mouse dragging handlers (panning)
   const handleMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return
     const target = e.target as HTMLElement
@@ -150,12 +146,6 @@ export default function DecisionTreeDashboard() {
     setIsPanning(false)
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem("auth")
-    router.push("/login")
-  }
-
-  // Handle Layer Click in Figma Right Sidebar (Rule 1: Focus and scroll)
   const handleLayerSelect = (layerName: string) => {
     const matchedNode = activeCase.nodes.find(
       (n) => n.title.toLowerCase() === layerName.toLowerCase()
@@ -165,7 +155,6 @@ export default function DecisionTreeDashboard() {
     }
   }
 
-  // Form submit to insert nodes via AI prompt
   const handlePromptSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!prompt.trim()) return
@@ -176,6 +165,7 @@ export default function DecisionTreeDashboard() {
     const trimmedPrompt = prompt.toLowerCase()
     const newNodeId = `node-custom-${Date.now()}`
     const isNo = trimmedPrompt.includes("não") || trimmedPrompt.includes("improcedente")
+    const isEmpty = trimmedPrompt.includes("vazio") || trimmedPrompt.includes("sem lei") || trimmedPrompt.includes("sem citação")
 
     const newNode: DecisionNode = {
       id: newNodeId,
@@ -185,11 +175,13 @@ export default function DecisionTreeDashboard() {
           : "decision",
       title: prompt.substring(0, 20) + (prompt.length > 20 ? "..." : ""),
       description: prompt,
-      source: {
-        type: "Precedente Jurídico",
-        text: `Normativa provisória gerada pela IA: "${prompt}"`,
-        link: "#",
-      },
+      references: isEmpty ? [] : [
+        {
+          id: `ref-custom-${Date.now()}`,
+          type: "doctrine",
+          title: "Precedente de IA",
+        }
+      ],
     }
 
     const newEdge: Relationship = {
@@ -202,13 +194,16 @@ export default function DecisionTreeDashboard() {
     addCustomNode(activeCaseId, newNode, newEdge)
     setPrompt("")
 
-    // Auto focus new node (which triggers centering useEffect)
     setTimeout(() => {
       setFocusedNodeId(newNodeId)
     }, 50)
   }
 
-  // Figma Layer Tree data generator
+  const handleLogout = () => {
+    localStorage.removeItem("auth")
+    router.push("/login")
+  }
+
   const getFigmaLayersData = (): TreeItem[] => {
     const allNodes = activeCase.nodes
     const edges = activeCase.edges
@@ -342,7 +337,7 @@ export default function DecisionTreeDashboard() {
           )}
         </header>
 
-        {/* Viewport container (Pan/Drag) */}
+        {/* Viewport container */}
         <div
           ref={viewportRef}
           onMouseDown={handleMouseDown}
@@ -354,7 +349,6 @@ export default function DecisionTreeDashboard() {
           }`}
         >
           
-          {/* Draggable Canvas surface */}
           <div
             style={{
               transform: `translate(${panX}px, ${panY}px)`,
@@ -366,19 +360,18 @@ export default function DecisionTreeDashboard() {
             }`}
           >
             
-            {/* 5. COMPONENTIZAÇÃO PLANA (EdgeRenderer e NodeRenderer paralelos) */}
             <EdgeRenderer edges={activeCase.edges} nodes={positionedNodes} />
 
             <NodeRenderer 
               nodes={positionedNodes} 
               focusedNodeId={focusedNodeId}
-              onCardClick={setReadingNodeData} // Rule 2: Open modal, no focus change
+              onCardClick={setReadingNodeData}
             />
 
           </div>
         </div>
 
-        {/* Floating AI Input */}
+        {/* Floating Input */}
         <div className="absolute bottom-6 left-1/2 -translate-x-[calc(50%+150px)] w-full max-w-2xl px-4 z-10">
           <form
             onSubmit={handlePromptSubmit}
@@ -390,7 +383,7 @@ export default function DecisionTreeDashboard() {
               onChange={(e) => setPrompt(e.target.value)}
               placeholder={
                 focusedNodeId 
-                  ? "Adicionar nó conectado ao nó focado (digite 'não' para ramificação negativa)..." 
+                  ? "Adicionar nó conectado (digite 'vazio' para testar estado sem citações)..." 
                   : "Selecione um nó acima e digite para adicionar ramificações..."
               }
               className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none border-none placeholder-zinc-400 dark:placeholder-zinc-500 text-zinc-900 dark:text-zinc-100"
@@ -407,7 +400,7 @@ export default function DecisionTreeDashboard() {
 
       </main>
 
-      {/* 3. SIDEBAR DIREITA - Figma component tree */}
+      {/* 3. SIDEBAR DIREITA - Árvore de Camadas estilo Figma */}
       <aside className="absolute top-6 right-6 bottom-6 w-[280px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-20">
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-150 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
           <div className="flex items-center gap-2">
@@ -424,7 +417,7 @@ export default function DecisionTreeDashboard() {
         <div className="flex-1 overflow-y-auto p-3">
           <FileTree 
             data={getFigmaLayersData()} 
-            onFileSelect={handleLayerSelect} // Rule 1: Focus & Center
+            onFileSelect={handleLayerSelect}
           />
         </div>
       </aside>
@@ -452,7 +445,7 @@ export default function DecisionTreeDashboard() {
                 <input
                   type="text"
                   defaultValue="Allex Lemes"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-850 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-855 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
               <div>
@@ -460,12 +453,12 @@ export default function DecisionTreeDashboard() {
                 <input
                   type="email"
                   defaultValue="allex@auralex.com"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-850 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-855 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                 />
               </div>
               <div>
                 <label className="text-xs font-bold text-zinc-400 block mb-1">TEMA DO INTERFACE</label>
-                <select className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent focus:outline-none dark:bg-zinc-900 text-zinc-850 dark:text-zinc-100">
+                <select className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent focus:outline-none dark:bg-zinc-900 text-zinc-855 dark:text-zinc-100">
                   <option>Escuro (Padrão)</option>
                   <option>Claro</option>
                   <option>Seguir Sistema</option>
@@ -491,9 +484,17 @@ export default function DecisionTreeDashboard() {
         </div>
       )}
 
-      {/* 4. MODAL DE DETALHES DO NÓ (Exibição da Fonte Jurídica) */}
+      {/* 2. BACKDROP PARA O DRAWER LATERAL */}
       {readingNodeData && (
-        <NodeDetailsModal 
+        <div 
+          className="fixed inset-0 bg-black/45 backdrop-blur-xs z-40 animate-in fade-in duration-200"
+          onClick={() => setReadingNodeData(null)}
+        />
+      )}
+
+      {/* 2. DRAWER LATERAL DE DETALHES DO NÓ (Desliza à direita) */}
+      {readingNodeData && (
+        <NodeDetailsDrawer 
           node={readingNodeData} 
           onClose={() => setReadingNodeData(null)} 
         />
@@ -503,7 +504,7 @@ export default function DecisionTreeDashboard() {
   )
 }
 
-// 5. COMPONENTIZAÇÃO PLANA - EdgeRenderer (SVG Background Connections)
+// 5. EdgeRenderer
 interface EdgeRendererProps {
   edges: Relationship[]
   nodes: PositionedNode[]
@@ -530,11 +531,9 @@ function EdgeRenderer({ edges, nodes }: EdgeRendererProps) {
         const child = nodes.find((n) => n.id === edge.target)
         if (!parent || !child) return null
 
-        // Parent Bottom Center
         const x1 = parent.x + 110
         const y1 = parent.y + 110
 
-        // Child Top Center
         const x2 = child.x + 110
         const y2 = child.y
 
@@ -580,7 +579,7 @@ function EdgeRenderer({ edges, nodes }: EdgeRendererProps) {
   )
 }
 
-// 5. COMPONENTIZAÇÃO PLANA - NodeRenderer (Absolute positioned cards)
+// 5. NodeRenderer
 interface NodeRendererProps {
   nodes: PositionedNode[]
   focusedNodeId: string | null
@@ -593,14 +592,13 @@ function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) 
       {nodes.map((node) => {
         const isFocused = node.id === focusedNodeId
 
-        // Prevents dragging/panning the canvas when clicking/pressing down on a node card
         const handleMouseDown = (e: React.MouseEvent) => {
           e.stopPropagation()
         }
 
         const handleClick = (e: React.MouseEvent) => {
           e.stopPropagation()
-          onCardClick(node) // Opens modal (Rule 2)
+          onCardClick(node)
         }
 
         return (
@@ -620,7 +618,7 @@ function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) 
               <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${
                 node.type === "decision"
                   ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450"
-                  : "bg-zinc-100 text-zinc-805 dark:bg-zinc-800 dark:text-zinc-350"
+                  : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-350"
               }`}>
                 {node.type === "decision" ? "Decisão" : "Resultado"}
               </span>
@@ -631,7 +629,7 @@ function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) 
               {node.title}
             </h4>
 
-            <p className="text-xs text-zinc-500 dark:text-zinc-400 leading-relaxed min-h-[40px] break-words">
+            <p className="text-xs text-zinc-550 dark:text-zinc-400 leading-relaxed min-h-[40px] break-words">
               {node.description}
             </p>
           </div>
@@ -641,75 +639,114 @@ function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) 
   )
 }
 
-// 4. DETALHES DO NÓ (Exibição de Fontes Jurídicas)
-interface NodeDetailsModalProps {
+// 3. ReferenceChip Subcomponent
+function ReferenceChip({ refItem }: { refItem: ReferenceItem }) {
+  const colors = {
+    law: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/50 dark:hover:bg-blue-900/40",
+    jurisprudence: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50 dark:hover:bg-emerald-900/40",
+    doctrine: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/50 dark:hover:bg-purple-900/40",
+  }
+
+  const icons = {
+    law: <FileText className="h-3.5 w-3.5" />,
+    jurisprudence: <Gavel className="h-3.5 w-3.5" />,
+    doctrine: <BookOpen className="h-3.5 w-3.5" />,
+  }
+
+  const chipContent = (
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-semibold cursor-pointer transition-colors ${colors[refItem.type]}`}>
+      {icons[refItem.type]}
+      <span>{refItem.title}</span>
+      {refItem.url && <ExternalLink className="h-3 w-3 opacity-60" />}
+    </span>
+  )
+
+  if (refItem.url) {
+    return (
+      <a href={refItem.url} target="_blank" rel="noreferrer" className="no-underline">
+        {chipContent}
+      </a>
+    )
+  }
+
+  return chipContent
+}
+
+// 2. NodeDetailsDrawer (Sliding Right Panel)
+interface NodeDetailsDrawerProps {
   node: DecisionNode
   onClose: () => void
 }
 
-function NodeDetailsModal({ node, onClose }: NodeDetailsModalProps) {
+function NodeDetailsDrawer({ node, onClose }: NodeDetailsDrawerProps) {
+  const hasReferences = node.references && node.references.length > 0
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200">
-      <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 text-zinc-900 dark:text-zinc-100 flex flex-col gap-4">
-        
-        <div className="flex items-center justify-between border-b border-zinc-100 dark:border-zinc-800 pb-3">
-          <div className="flex items-center gap-2">
-            <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${
-              node.type === "decision" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450" : "bg-zinc-100 text-zinc-850 dark:bg-zinc-800 dark:text-zinc-300"
-            }`}>
-              {node.type === "decision" ? "Decisão" : "Resultado"}
-            </span>
-            <h3 className="text-base font-bold truncate max-w-[280px]">{node.title}</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
-          >
-            <X className="h-4 w-4 text-zinc-400" />
-          </button>
+    <div className="fixed top-0 right-0 h-full w-[400px] bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-300 text-zinc-900 dark:text-zinc-100">
+      
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-150 dark:border-zinc-850">
+        <div className="flex items-center gap-2">
+          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${
+            node.type === "decision" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450" : "bg-zinc-100 text-zinc-850 dark:bg-zinc-800 dark:text-zinc-300"
+          }`}>
+            {node.type === "decision" ? "Decisão" : "Resultado"}
+          </span>
+          <h3 className="text-sm font-bold truncate max-w-[180px]">{node.title}</h3>
         </div>
-
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Descrição / Questão Jurídica</h4>
-            <p className="text-sm mt-1.5 text-zinc-700 dark:text-zinc-300 leading-relaxed font-medium">
-              {node.description}
-            </p>
-          </div>
-
-          <div className="bg-zinc-50 dark:bg-zinc-950 p-4 rounded-xl border border-zinc-150 dark:border-zinc-850/50 flex flex-col gap-2">
-            <h4 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-              <Scale className="h-4 w-4" />
-              FONTE JURÍDICA (LEGISLAÇÃO / SÚMULA)
-            </h4>
-            <span className="text-[10px] font-semibold px-2 py-0.5 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 self-start rounded uppercase tracking-wide">
-              {node.source.type}
-            </span>
-            <p className="text-xs mt-1 text-zinc-650 dark:text-zinc-400 italic leading-relaxed bg-white dark:bg-zinc-900/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-850">
-              "{node.source.text}"
-            </p>
-            {node.source.link && node.source.link !== "#" && (
-              <a
-                href={node.source.link}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline mt-1 flex items-center gap-1 self-start cursor-pointer"
-              >
-                Visualizar no Jusbrasil ou Diário Oficial →
-              </a>
-            )}
-          </div>
-        </div>
-
-        <div className="flex justify-end mt-2">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-650 text-white cursor-pointer"
-          >
-            Fechar Detalhes
-          </button>
-        </div>
+        <button
+          onClick={onClose}
+          className="p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+        >
+          <X className="h-4 w-4 text-zinc-400" />
+        </button>
       </div>
+
+      {/* Body content scrollable */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        
+        {/* Description Section */}
+        <div className="space-y-1.5">
+          <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Descrição Jurídica</h4>
+          <p className="text-sm text-zinc-700 dark:text-zinc-350 leading-relaxed font-medium">
+            {node.description}
+          </p>
+        </div>
+
+        {/* References Section */}
+        <div className="space-y-3">
+          <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+            <Scale className="h-4 w-4 text-indigo-500" />
+            Citações & Referências Jurídicas
+          </h4>
+
+          {/* 4. ESTADO VAZIO (Empty State) */}
+          {!hasReferences ? (
+            <p className="text-xs text-zinc-400 dark:text-zinc-500 italic">
+              Nenhuma citação legal direta atrelada a este nó.
+            </p>
+          ) : (
+            /* 3. Reference Chips rendering */
+            <div className="flex flex-wrap gap-2">
+              {node.references.map((ref) => (
+                <ReferenceChip key={ref.id} refItem={ref} />
+              ))}
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 border-t border-zinc-150 dark:border-zinc-850 flex justify-end">
+        <button
+          onClick={onClose}
+          className="px-5 py-2.5 rounded-xl bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 font-bold text-xs cursor-pointer transition-colors"
+        >
+          Fechar Painel
+        </button>
+      </div>
+
     </div>
   )
 }

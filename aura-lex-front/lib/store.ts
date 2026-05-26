@@ -1,9 +1,10 @@
 import { create } from "zustand"
 
-export interface LegalSource {
-  type: string
-  text: string
-  link: string
+export interface ReferenceItem {
+  id: string
+  type: "jurisprudence" | "law" | "doctrine"
+  title: string
+  url?: string
 }
 
 export interface DecisionNode {
@@ -11,7 +12,7 @@ export interface DecisionNode {
   type: "decision" | "result"
   title: string
   description: string
-  source: LegalSource
+  references: ReferenceItem[]
 }
 
 export interface Relationship {
@@ -51,77 +52,106 @@ const defaultCases: CaseItem[] = [
         type: "decision",
         title: "Admissibilidade Recursal",
         description: "O recurso ordinário foi protocolado dentro do prazo de 8 dias úteis?",
-        source: {
-          type: "Artigo CLT",
-          text: "Art. 895 da CLT - Cabe recurso ordinário para a instância superior no prazo de 8 dias.",
-          link: "https://www.jusbrasil.com.br/topicos/10714774/artigo-895-da-consolidacao-das-leis-do-trabalho-decreto-lei-n-5452-de-01-de-maio-de-1943",
-        },
+        references: [
+          {
+            id: "ref-1",
+            type: "law",
+            title: "Art. 895, CLT",
+            url: "https://www.jusbrasil.com.br/topicos/10714774/artigo-895-da-consolidacao-das-leis-do-trabalho-decreto-lei-n-5452-de-01-de-maio-de-1943",
+          },
+          {
+            id: "ref-2",
+            type: "doctrine",
+            title: "Teoria da Recorribilidade Trabalhista",
+          },
+        ],
       },
       {
         id: "node-preparo",
         type: "decision",
         title: "Preparo Efetuado",
         description: "As custas processuais e o depósito recursal foram devidamente pagos e comprovados?",
-        source: {
-          type: "Súmula TST",
-          text: "Súmula nº 245 do TST - O preparo recursal deve ser comprovado no prazo recursal.",
-          link: "https://www.jusbrasil.com.br/jurisprudencia/sumulas/tst/sumula-245",
-        },
+        references: [
+          {
+            id: "ref-3",
+            type: "jurisprudence",
+            title: "Súmula 245, TST",
+            url: "https://www.jusbrasil.com.br/jurisprudencia/sumulas/tst/sumula-245",
+          },
+        ],
       },
       {
         id: "node-intempestivo",
         type: "result",
         title: "Recurso Intempestivo",
         description: "Extinção do processo sem resolução do mérito por intempestividade.",
-        source: {
-          type: "Artigo CPC",
-          text: "Art. 932, III do CPC - Cabe ao relator não conhecer de recurso inadmissível.",
-          link: "https://www.jusbrasil.com.br/topicos/28892497/artigo-932-da-lei-n-13105-de-16-de-marco-de-2015",
-        },
+        references: [
+          {
+            id: "ref-4",
+            type: "law",
+            title: "Art. 932, III, CPC",
+            url: "https://www.jusbrasil.com.br/topicos/28892497/artigo-932-da-lei-n-13105-de-16-de-marco-de-2015",
+          },
+        ],
       },
       {
         id: "node-vinculo",
         type: "decision",
         title: "Vínculo Empregatício",
         description: "Ficou caracterizada a subordinação, habitualidade, onerosidade e pessoalidade?",
-        source: {
-          type: "Artigo CLT",
-          text: "Art. 3º da CLT - Considera-se empregado toda pessoa física que prestar serviços de natureza não eventual a empregador, sob a dependência deste e mediante salário.",
-          link: "https://www.jusbrasil.com.br/topicos/10729780/artigo-3-da-consolidacao-das-leis-do-trabalho-decreto-lei-n-5452-de-01-de-maio-de-1943",
-        },
+        references: [
+          {
+            id: "ref-5",
+            type: "law",
+            title: "Art. 3º, CLT",
+            url: "https://www.jusbrasil.com.br/topicos/10729780/artigo-3-da-consolidacao-das-leis-do-trabalho-decreto-lei-n-5452-de-01-de-maio-de-1943",
+          },
+          {
+            id: "ref-6",
+            type: "doctrine",
+            title: "Curso de Trabalho - M. Godinho",
+          },
+        ],
       },
       {
         id: "node-deserto",
         type: "result",
         title: "Recurso Deserto",
         description: "Não conhecimento do recurso ordinário por deserção do preparo.",
-        source: {
-          type: "Súmula TST",
-          text: "Súmula nº 128 do TST - Exige-se o depósito recursal para garantia do juízo.",
-          link: "https://www.jusbrasil.com.br/jurisprudencia/sumulas/tst/sumula-128",
-        },
+        references: [
+          {
+            id: "ref-7",
+            type: "jurisprudence",
+            title: "Súmula 128, TST",
+            url: "https://www.jusbrasil.com.br/jurisprudencia/sumulas/tst/sumula-128",
+          },
+        ],
       },
       {
         id: "node-procedente",
         type: "result",
         title: "Sentença Mantida",
         description: "Manutenção do reconhecimento do vínculo empregatício em segunda instância.",
-        source: {
-          type: "Jurisprudência",
-          text: "Acórdão Regional TRT - Presença dos requisitos da relação de emprego comprovada por depoimento testemunhal.",
-          link: "#",
-        },
+        references: [
+          {
+            id: "ref-8",
+            type: "jurisprudence",
+            title: "Acórdão Regional, TRT",
+          },
+        ],
       },
       {
         id: "node-improcedente",
         type: "result",
         title: "Sentença Reformada",
         description: "Afastamento do vínculo por ausência de prova de subordinação.",
-        source: {
-          type: "Jurisprudência",
-          text: "Acórdão Regional TRT - Ônus da prova do autor não satisfeito quanto ao requisito da subordinação jurídica.",
-          link: "#",
-        },
+        references: [
+          {
+            id: "ref-9",
+            type: "jurisprudence",
+            title: "Precedente Subordinação, TRT",
+          },
+        ],
       },
     ],
     edges: [
@@ -142,77 +172,96 @@ const defaultCases: CaseItem[] = [
         type: "decision",
         title: "Ato Ilícito",
         description: "Houve conduta ilícita, culposa ou dolosa do réu?",
-        source: {
-          type: "Artigo Código Civil",
-          text: "Art. 186 do Código Civil - Aquele que, por ação ou omissão voluntária, negligência ou imprudência, violar direito e causar dano a outrem, comete ato ilícito.",
-          link: "https://www.jusbrasil.com.br/topicos/10718503/artigo-186-da-lei-n-10406-de-10-de-janeiro-de-2002",
-        },
+        references: [
+          {
+            id: "ref-2-1",
+            type: "law",
+            title: "Art. 186, CC",
+            url: "https://www.jusbrasil.com.br/topicos/10718503/artigo-186-da-lei-n-10406-de-10-de-janeiro-de-2002",
+          },
+        ],
       },
       {
         id: "node-dano-2",
         type: "decision",
         title: "Dano Comprovado",
         description: "A vítima sofreu efetivo abalo psicológico ou ofensa aos direitos de personalidade?",
-        source: {
-          type: "Artigo CF/88",
-          text: "Art. 5º, V da CF - É assegurado o direito de resposta, proporcional ao agravo, além da indenização por dano material, moral ou à imagem.",
-          link: "https://www.jusbrasil.com.br/topicos/10647895/artigo-5-da-constituicao-federal-de-1988",
-        },
+        references: [
+          {
+            id: "ref-2-2",
+            type: "law",
+            title: "Art. 5º, V, CF/88",
+            url: "https://www.jusbrasil.com.br/topicos/10647895/artigo-5-da-constituicao-federal-de-1988",
+          },
+        ],
       },
       {
         id: "node-sem-ato-2",
         type: "result",
         title: "Ausência de Conduta",
         description: "Improcedência. A conduta do réu estava no exercício regular de um direito.",
-        source: {
-          type: "Artigo Código Civil",
-          text: "Art. 188, I do Código Civil - Não constituem atos ilícitos os praticados em legítima defesa ou no exercício regular de um direito.",
-          link: "https://www.jusbrasil.com.br/topicos/10718302/artigo-188-da-lei-n-10406-de-10-de-janeiro-de-2002",
-        },
+        references: [
+          {
+            id: "ref-2-3",
+            type: "law",
+            title: "Art. 188, I, CC",
+            url: "https://www.jusbrasil.com.br/topicos/10718302/artigo-188-da-lei-n-10406-de-10-de-janeiro-de-2002",
+          },
+        ],
       },
       {
         id: "node-nexo-2",
         type: "decision",
         title: "Nexo Causal",
         description: "Existe relação direta de causa e efeito entre o ato ilícito e o dano?",
-        source: {
-          type: "Artigo Código Civil",
-          text: "Art. 403 do Código Civil - As perdas e danos só incluem os prejuízos efetivos e lucros cessantes por efeito direto e imediato da inexecução.",
-          link: "https://www.jusbrasil.com.br/topicos/10708682/artigo-403-da-lei-n-10406-de-10-de-janeiro-de-2002",
-        },
+        references: [
+          {
+            id: "ref-2-4",
+            type: "law",
+            title: "Art. 403, CC",
+            url: "https://www.jusbrasil.com.br/topicos/10708682/artigo-403-da-lei-n-10406-de-10-de-janeiro-de-2002",
+          },
+        ],
       },
       {
         id: "node-sem-dano-2",
         type: "result",
         title: "Ausência de Dano",
         description: "Improcedência. Mero dissabor cotidiano não gera direito a indenização moral.",
-        source: {
-          type: "Jurisprudência",
-          text: "Mero descumprimento contratual, em regra, não gera dano moral in re ipsa.",
-          link: "#",
-        },
+        references: [
+          {
+            id: "ref-2-5",
+            type: "jurisprudence",
+            title: "Inadimplemento Contratual, STJ",
+          },
+        ],
       },
       {
         id: "node-indenizar-2",
         type: "result",
         title: "Dever de Indenizar",
         description: "Procedência da ação com arbitramento do quantum indenizatório.",
-        source: {
-          type: "Artigo Código Civil",
-          text: "Art. 927 do Código Civil - Aquele que, por ato ilícito, causar dano a outrem, fica obrigado a repará-lo.",
-          link: "https://www.jusbrasil.com.br/topicos/10675662/artigo-927-da-lei-n-10406-de-10-de-janeiro-de-2002",
-        },
+        references: [
+          {
+            id: "ref-2-6",
+            type: "law",
+            title: "Art. 927, CC",
+            url: "https://www.jusbrasil.com.br/topicos/10675662/artigo-927-da-lei-n-10406-de-10-de-janeiro-de-2002",
+          },
+        ],
       },
       {
         id: "node-sem-nexo-2",
         type: "result",
         title: "Ausência de Responsabilidade",
         description: "Improcedência. Ocorrência de culpa exclusiva da vítima ou de força maior.",
-        source: {
-          type: "Doutrina",
-          text: "Excludentes de nexo causal rompem o dever de indenizar do agente.",
-          link: "#",
-        },
+        references: [
+          {
+            id: "ref-2-7",
+            type: "doctrine",
+            title: "Responsabilidade Civil - S. Venosa",
+          },
+        ],
       },
     ],
     edges: [
@@ -248,11 +297,13 @@ export const useGraphStore = create<GraphState>((set) => ({
             type: "decision",
             title: "Nó Inicial",
             description: "Escreva no chat para criar novas hipóteses de decisão.",
-            source: {
-              type: "Legislação Geral",
-              text: "Art. 1º - Defina a premissa fundamental deste caso jurídico.",
-              link: "#",
-            },
+            references: [
+              {
+                id: `ref-init-${Date.now()}`,
+                type: "law",
+                title: "Art. 1º, Geral",
+              },
+            ],
           },
         ],
         edges: [],
@@ -274,7 +325,6 @@ export const useGraphStore = create<GraphState>((set) => ({
         nextActiveId = updatedCases.length > 0 ? updatedCases[0].id : ""
       }
 
-      // If no cases left, create a default one
       if (updatedCases.length === 0) {
         const defaultId = "case-default"
         const defaultCase: CaseItem = {
@@ -286,11 +336,13 @@ export const useGraphStore = create<GraphState>((set) => ({
               type: "decision",
               title: "Nó Inicial",
               description: "Digite uma mensagem no chat para começar.",
-              source: {
-                type: "Legislação Geral",
-                text: "Fundamentação inicial.",
-                link: "#",
-              },
+              references: [
+                {
+                  id: "ref-default-init",
+                  type: "law",
+                  title: "Art. 1º, Geral",
+                },
+              ],
             },
           ],
           edges: [],
