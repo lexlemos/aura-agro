@@ -10,7 +10,7 @@ interface FileTreeProps {
   onFileSelect?: (fileName: string) => void
 }
 
-export function FileTree({ data, onFileSelect }: FileTreeProps) {
+export const FileTree = React.memo(function FileTree({ data, onFileSelect }: FileTreeProps) {
   return (
     <ul className="space-y-1 font-sans text-sm select-none">
       {data.map((item, index) => (
@@ -18,9 +18,9 @@ export function FileTree({ data, onFileSelect }: FileTreeProps) {
       ))}
     </ul>
   )
-}
+})
 
-function TreeNode({
+const TreeNode = React.memo(function TreeNode({
   item,
   onFileSelect,
   depth,
@@ -91,7 +91,7 @@ function TreeNode({
       )}
     </li>
   )
-}
+})
 
 // Dados de exemplo preservados da sidebar antiga
 export const sampleFileTreeData: TreeItem[] = [

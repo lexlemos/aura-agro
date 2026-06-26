@@ -22,7 +22,10 @@ import {
   ChevronLeft,
   ChevronRight,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Scroll,
+  Book,
+  LayoutDashboard
 } from "lucide-react"
 import { FileTree, TreeItem } from "@/components/file-tree"
 import { useGraphStore, DecisionNode, Relationship, ReferenceItem } from "@/lib/store"
@@ -54,10 +57,12 @@ function getLayoutedElements(
 
   return nodes.map((node) => {
     const nodeInfo = g.node(node.id)
+    const x = nodeInfo && typeof nodeInfo.x === "number" && !isNaN(nodeInfo.x) ? nodeInfo.x : 0
+    const y = nodeInfo && typeof nodeInfo.y === "number" && !isNaN(nodeInfo.y) ? nodeInfo.y : 0
     return {
       ...node,
-      x: nodeInfo.x - 110,
-      y: nodeInfo.y - 55,
+      x: x - 110,
+      y: y - 55,
     }
   })
 }
@@ -71,9 +76,11 @@ export default function DecisionTreeDashboard() {
     activeCaseId,
     focusedNodeId,
     readingNodeData,
+    isProducerView,
     setActiveCaseId,
     setFocusedNodeId,
     setReadingNodeData,
+    toggleView,
     addNewCase,
     deleteCase,
     addCustomNode,
@@ -104,10 +111,13 @@ export default function DecisionTreeDashboard() {
       const rect = viewportRef.current.getBoundingClientRect()
       const layoutedRoot = positionedNodes.find((n) => n.id === rootNode.id)
       if (layoutedRoot) {
-        setPanX(rect.width / 2 - layoutedRoot.x - 110)
-        setPanY(80)
+        const targetX = rect.width / 2 - layoutedRoot.x - 110
+        const targetY = 80
+        setPanX(targetX)
+        setPanY(targetY)
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCaseId])
 
   // Center on layer focus
@@ -116,16 +126,23 @@ export default function DecisionTreeDashboard() {
       const node = positionedNodes.find((n) => n.id === focusedNodeId)
       if (node) {
         const rect = viewportRef.current.getBoundingClientRect()
-        setIsAnimating(true)
-        setPanX(rect.width / 2 - node.x - 110)
-        setPanY(rect.height / 2 - node.y - 55)
-        const timer = setTimeout(() => setIsAnimating(false), 300)
-        return () => clearTimeout(timer)
+        const targetX = rect.width / 2 - node.x - 110
+        const targetY = rect.height / 2 - node.y - 55
+        
+        // Only trigger state updates if the position actually changed to prevent infinite rendering loops
+        if (Math.abs(panX - targetX) > 1 || Math.abs(panY - targetY) > 1) {
+          setIsAnimating(true)
+          setPanX(targetX)
+          setPanY(targetY)
+          const timer = setTimeout(() => setIsAnimating(false), 300)
+          return () => clearTimeout(timer)
+        }
       }
     }
-  }, [focusedNodeId, positionedNodes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedNodeId])
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = React.useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
     const target = e.target as HTMLElement
     if (
@@ -139,28 +156,28 @@ export default function DecisionTreeDashboard() {
     setIsPanning(true)
     setIsAnimating(false)
     setDragStart({ x: e.clientX - panX, y: e.clientY - panY })
-  }
+  }, [panX, panY])
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = React.useCallback((e: React.MouseEvent) => {
     if (!isPanning) return
     setPanX(e.clientX - dragStart.x)
     setPanY(e.clientY - dragStart.y)
-  }
+  }, [isPanning, dragStart])
 
-  const handleMouseUp = () => {
+  const handleMouseUp = React.useCallback(() => {
     setIsPanning(false)
-  }
+  }, [])
 
-  const handleLayerSelect = (layerName: string) => {
+  const handleLayerSelect = React.useCallback((layerName: string) => {
     const matchedNode = activeCase.nodes.find(
       (n) => n.title.toLowerCase() === layerName.toLowerCase()
     )
     if (matchedNode) {
       setFocusedNodeId(matchedNode.id)
     }
-  }
+  }, [activeCase.nodes, setFocusedNodeId])
 
-  const handlePromptSubmit = (e: React.FormEvent) => {
+  const handlePromptSubmit = React.useCallback((e: React.FormEvent) => {
     e.preventDefault()
     if (!prompt.trim()) return
 
@@ -180,10 +197,11 @@ export default function DecisionTreeDashboard() {
           : "decision",
       title: prompt.substring(0, 20) + (prompt.length > 20 ? "..." : ""),
       description: prompt,
+      simplifiedText: `[Produtor] ${prompt}`,
       references: isEmpty ? [] : [
         {
           id: `ref-custom-${Date.now()}`,
-          type: "doctrine",
+          type: "manual",
           title: "Precedente de IA",
         }
       ],
@@ -202,14 +220,14 @@ export default function DecisionTreeDashboard() {
     setTimeout(() => {
       setFocusedNodeId(newNodeId)
     }, 50)
-  }
+  }, [prompt, focusedNodeId, activeCase.nodes, activeCaseId, addCustomNode, setFocusedNodeId])
 
   const handleLogout = () => {
     localStorage.removeItem("auth")
     router.push("/login")
   }
 
-  const getFigmaLayersData = (): TreeItem[] => {
+  const layersData = React.useMemo((): TreeItem[] => {
     const allNodes = activeCase.nodes
     const edges = activeCase.edges
     const roots = allNodes.filter((n) => !edges.some((e) => e.target === n.id))
@@ -223,7 +241,7 @@ export default function DecisionTreeDashboard() {
     }
 
     return roots.map((root) => buildSubTree(root))
-  }
+  }, [activeCase.nodes, activeCase.edges])
 
   return (
     <div className="h-screen w-screen flex overflow-hidden bg-zinc-50 dark:bg-zinc-950 font-sans text-zinc-900 dark:text-zinc-100">
@@ -358,9 +376,37 @@ export default function DecisionTreeDashboard() {
       <main className="flex-1 flex flex-col h-full relative bg-zinc-50 dark:bg-zinc-900 overflow-hidden pr-[300px]">
 
         <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md px-6 flex items-center justify-between z-10">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Caso /</span>
-            <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">{activeCase.title}</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Caso /</span>
+              <span className="text-sm font-bold text-zinc-800 dark:text-zinc-100">{activeCase.title}</span>
+            </div>
+
+            {/* Toggle de Visualização (CAR) */}
+            <div className="flex items-center gap-1 bg-zinc-100 dark:bg-zinc-800/80 p-0.5 rounded-lg border border-zinc-200/50 dark:border-zinc-700/50 text-[10px] sm:text-xs">
+              <button
+                type="button"
+                onClick={() => isProducerView && toggleView()}
+                className={`px-3 py-1 rounded-md transition-all font-semibold cursor-pointer ${
+                  !isProducerView
+                    ? "bg-white dark:bg-zinc-750 text-indigo-650 dark:text-indigo-300 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+                }`}
+              >
+                Visão Jurídica
+              </button>
+              <button
+                type="button"
+                onClick={() => !isProducerView && toggleView()}
+                className={`px-3 py-1 rounded-md transition-all font-semibold cursor-pointer ${
+                  isProducerView
+                    ? "bg-white dark:bg-zinc-750 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+                }`}
+              >
+                Visão Produtor
+              </button>
+            </div>
           </div>
           {focusedNodeId && (
             <div className="text-xs text-zinc-500 flex items-center gap-1.5">
@@ -455,7 +501,7 @@ export default function DecisionTreeDashboard() {
 
         <div className="flex-1 overflow-y-auto p-3">
           <FileTree
-            data={getFigmaLayersData()}
+            data={layersData}
             onFileSelect={handleLayerSelect}
           />
         </div>
@@ -549,7 +595,7 @@ interface EdgeRendererProps {
   nodes: PositionedNode[]
 }
 
-function EdgeRenderer({ edges, nodes }: EdgeRendererProps) {
+const EdgeRenderer = React.memo(function EdgeRenderer({ edges, nodes }: EdgeRendererProps) {
   return (
     <svg className="absolute inset-0 pointer-events-none w-full h-full z-0">
       <defs>
@@ -615,7 +661,7 @@ function EdgeRenderer({ edges, nodes }: EdgeRendererProps) {
       })}
     </svg>
   )
-}
+})
 
 // 5. NodeRenderer
 interface NodeRendererProps {
@@ -624,7 +670,8 @@ interface NodeRendererProps {
   onCardClick: (node: DecisionNode) => void
 }
 
-function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) {
+const NodeRenderer = React.memo(function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) {
+  const isProducerView = useGraphStore((state) => state.isProducerView)
   return (
     <>
       {nodes.map((node) => {
@@ -654,7 +701,7 @@ function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) 
             <div className="flex items-center justify-between">
               <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${node.type === "decision"
                   ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450"
-                  : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-350"
+                  : "bg-zinc-100 text-zinc-850 dark:bg-zinc-800 dark:text-zinc-350"
                 }`}>
                 {node.type === "decision" ? "Decisão" : "Resultado"}
               </span>
@@ -666,27 +713,29 @@ function NodeRenderer({ nodes, focusedNodeId, onCardClick }: NodeRendererProps) 
             </h4>
 
             <p className="text-xs text-zinc-550 dark:text-zinc-400 leading-relaxed min-h-[40px] break-words">
-              {node.description}
+              {isProducerView ? node.simplifiedText : node.description}
             </p>
           </div>
         )
       })}
     </>
   )
-}
+})
 
 // 3. ReferenceChip Subcomponent
 function ReferenceChip({ refItem }: { refItem: ReferenceItem }) {
   const colors = {
     law: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/50 dark:hover:bg-blue-900/40",
-    jurisprudence: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50 dark:hover:bg-emerald-900/40",
-    doctrine: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/50 dark:hover:bg-purple-900/40",
+    decree: "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-950/30 dark:text-purple-400 dark:border-purple-900/50 dark:hover:bg-purple-900/40",
+    manual: "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50 dark:hover:bg-amber-900/40",
+    dashboard: "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50 dark:hover:bg-emerald-900/40",
   }
 
   const icons = {
     law: <FileText className="h-3.5 w-3.5" />,
-    jurisprudence: <Gavel className="h-3.5 w-3.5" />,
-    doctrine: <BookOpen className="h-3.5 w-3.5" />,
+    decree: <Scroll className="h-3.5 w-3.5" />,
+    manual: <Book className="h-3.5 w-3.5" />,
+    dashboard: <LayoutDashboard className="h-3.5 w-3.5" />,
   }
 
   const chipContent = (
@@ -715,6 +764,7 @@ interface NodeDetailsDrawerProps {
 }
 
 function NodeDetailsDrawer({ node, onClose }: NodeDetailsDrawerProps) {
+  const isProducerView = useGraphStore((state) => state.isProducerView)
   const hasReferences = node.references && node.references.length > 0
 
   return (
@@ -742,11 +792,27 @@ function NodeDetailsDrawer({ node, onClose }: NodeDetailsDrawerProps) {
 
         {/* Description Section */}
         <div className="space-y-1.5">
-          <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Descrição Jurídica</h4>
+          <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+            {isProducerView ? "Resumo Simplificado" : "Descrição Jurídica"}
+          </h4>
           <p className="text-sm text-zinc-700 dark:text-zinc-350 leading-relaxed font-medium">
-            {node.description}
+            {isProducerView ? node.simplifiedText : node.description}
           </p>
         </div>
+
+        {/* Benefits Section (Producer view only) */}
+        {isProducerView && node.benefits && node.benefits.length > 0 && (
+          <div className="space-y-2 p-3 bg-emerald-500/10 dark:bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+            <h4 className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+              Benefícios & Vantagens
+            </h4>
+            <ul className="list-disc pl-4 text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
+              {node.benefits.map((benefit, idx) => (
+                <li key={idx}>{benefit}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* References Section */}
         <div className="space-y-3">
