@@ -2,7 +2,7 @@ import { create } from "zustand"
 
 export interface ReferenceItem {
   id: string
-  type: "jurisprudence" | "law" | "doctrine"
+  type: "law" | "decree" | "manual" | "dashboard"
   title: string
   url?: string
 }
@@ -12,6 +12,8 @@ export interface DecisionNode {
   type: "decision" | "result"
   title: string
   description: string
+  simplifiedText: string
+  benefits?: string[]
   references: ReferenceItem[]
 }
 
@@ -34,9 +36,11 @@ interface GraphState {
   activeCaseId: string
   focusedNodeId: string | null
   readingNodeData: DecisionNode | null
+  isProducerView: boolean
   setActiveCaseId: (id: string) => void
   setFocusedNodeId: (id: string | null) => void
   setReadingNodeData: (data: DecisionNode | null) => void
+  toggleView: () => void
   addNewCase: (title: string) => void
   deleteCase: (id: string) => void
   addCustomNode: (caseId: string, node: DecisionNode, edge: Relationship) => void
@@ -44,246 +48,150 @@ interface GraphState {
 
 const defaultCases: CaseItem[] = [
   {
-    id: "case-1",
-    title: "Recurso Ordinário Trabalhista",
+    id: "trilha-app-completa",
+    title: "Trilha de Regularização de APP (Marco Temporal)",
     nodes: [
       {
-        id: "node-root",
+        id: "node-root-tamanho",
         type: "decision",
-        title: "Admissibilidade Recursal",
-        description: "O recurso ordinário foi protocolado dentro do prazo de 8 dias úteis?",
+        title: "Classificação Fundiária",
+        description: "O imóvel rural possui área total líquida de ATÉ 4 (quatro) módulos fiscais, enquadrando-se no conceito de pequena propriedade ou posse rural familiar?",
+        simplifiedText: "O tamanho total da sua propriedade é de até 4 Módulos Fiscais? (Considerada uma pequena propriedade)",
         references: [
           {
-            id: "ref-1",
+            id: "ref-lei-pequeno",
             type: "law",
-            title: "Art. 895, CLT",
-            url: "https://www.jusbrasil.com.br/topicos/10714774/artigo-895-da-consolidacao-das-leis-do-trabalho-decreto-lei-n-5452-de-01-de-maio-de-1943",
+            title: "Art. 3º, V, Lei nº 12.651/2012 (Código Florestal)",
+            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
           },
           {
-            id: "ref-2",
-            type: "doctrine",
-            title: "Teoria da Recorribilidade Trabalhista",
-          },
-        ],
+            id: "ref-manual-car",
+            type: "manual",
+            title: "Manual do CAR - Conceitos Básicos",
+            url: "https://www.car.gov.br/publico/manuais/Manual_de_Apoio_CAR.pdf"
+          }
+        ]
       },
       {
-        id: "node-preparo",
+        id: "node-pequeno-marco",
         type: "decision",
-        title: "Preparo Efetuado",
-        description: "As custas processuais e o depósito recursal foram devidamente pagos e comprovados?",
+        title: "Marco Temporal (Pequeno Produtor)",
+        description: "A supressão de vegetação nativa na Área de Preservação Permanente (APP) constitui área rural consolidada, ou seja, ocorreu ANTES de 22 de julho de 2008?",
+        simplifiedText: "O desmatamento ou o uso dessa área perto do rio (para plantio ou pasto) começou antes de julho de 2008?",
         references: [
           {
-            id: "ref-3",
-            type: "jurisprudence",
-            title: "Súmula 245, TST",
-            url: "https://www.jusbrasil.com.br/jurisprudencia/sumulas/tst/sumula-245",
-          },
-        ],
+            id: "ref-decreto-consolidada",
+            type: "decree",
+            title: "Art. 2º, IV, Decreto nº 7.830/2012",
+            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/decreto/d7830.htm"
+          }
+        ]
       },
       {
-        id: "node-intempestivo",
-        type: "result",
-        title: "Recurso Intempestivo",
-        description: "Extinção do processo sem resolução do mérito por intempestividade.",
-        references: [
-          {
-            id: "ref-4",
-            type: "law",
-            title: "Art. 932, III, CPC",
-            url: "https://www.jusbrasil.com.br/topicos/28892497/artigo-932-da-lei-n-13105-de-16-de-marco-de-2015",
-          },
-        ],
-      },
-      {
-        id: "node-vinculo",
+        id: "node-grande-marco",
         type: "decision",
-        title: "Vínculo Empregatício",
-        description: "Ficou caracterizada a subordinação, habitualidade, onerosidade e pessoalidade?",
+        title: "Marco Temporal (Médio/Grande Produtor)",
+        description: "Para imóveis acima de 4 módulos fiscais, a ocupação antrópica na Área de Preservação Permanente (APP) ocorreu ANTES de 22 de julho de 2008?",
+        simplifiedText: "Como sua propriedade é maior que 4 módulos fiscais, o uso da área perto do rio começou antes de julho de 2008?",
         references: [
           {
-            id: "ref-5",
+            id: "ref-lei-marco",
             type: "law",
-            title: "Art. 3º, CLT",
-            url: "https://www.jusbrasil.com.br/topicos/10729780/artigo-3-da-consolidacao-das-leis-do-trabalho-decreto-lei-n-5452-de-01-de-maio-de-1943",
-          },
-          {
-            id: "ref-6",
-            type: "doctrine",
-            title: "Curso de Trabalho - M. Godinho",
-          },
-        ],
+            title: "Art. 61-A, Lei nº 12.651/2012",
+            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+          }
+        ]
       },
       {
-        id: "node-deserto",
+        id: "node-result-escadinha",
         type: "result",
-        title: "Recurso Deserto",
-        description: "Não conhecimento do recurso ordinário por deserção do preparo.",
+        title: "Regularização - Regra da Escadinha",
+        description: "Imóvel elegível à recomposição reduzida de APP (Regra da Escadinha) proporcional ao tamanho da propriedade. Suspensão imediata de sanções mediante adesão ao Programa de Regularização Ambiental (PRA).",
+        simplifiedText: "Excelente notícia! Como sua propriedade é pequena e o uso é antigo (antes de 2008), você tem direito a regras mais brandas. A faixa de mata a ser recuperada será menor e você não pagará multas retroativas. Basta aderir ao PRA.",
+        benefits: [
+          "Isenção de Multas Pretéritas",
+          "Faixa de Recuperação Reduzida",
+          "Garantia de Crédito Rural (PRONAF)"
+        ],
         references: [
           {
-            id: "ref-7",
-            type: "jurisprudence",
-            title: "Súmula 128, TST",
-            url: "https://www.jusbrasil.com.br/jurisprudencia/sumulas/tst/sumula-128",
-          },
-        ],
+            id: "ref-painel-pra",
+            type: "dashboard",
+            title: "Painel da Regularização Ambiental",
+            url: "https://www.florestal.gov.br/painel-da-regularizacao-ambiental"
+          }
+        ]
       },
       {
-        id: "node-procedente",
+        id: "node-result-pra-comum",
         type: "result",
-        title: "Sentença Mantida",
-        description: "Manutenção do reconhecimento do vínculo empregatício em segunda instância.",
+        title: "Regularização - Recomposição Padrão",
+        description: "Área consolidada reconhecida. Obrigatória a recomposição das faixas marginais conforme larguras mínimas do Art. 61-A, sem os redutores da pequena propriedade. Exigida adesão ao PRA para conversão de multas.",
+        simplifiedText: "Como o uso é antigo (antes de 2008), você pode converter suas multas aderindo ao PRA (Programa de Regularização Ambiental), mas terá que recuperar a faixa padrão de mata ciliar exigida para o tamanho da sua propriedade.",
+        benefits: [
+          "Conversão de Multas (Adesão ao PRA)",
+          "Acesso Mantido ao Crédito Agrícola"
+        ],
         references: [
           {
-            id: "ref-8",
-            type: "jurisprudence",
-            title: "Acórdão Regional, TRT",
-          },
-        ],
+            id: "ref-lei-61a",
+            type: "law",
+            title: "Art. 61-A, Lei nº 12.651/2012",
+            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+          }
+        ]
       },
       {
-        id: "node-improcedente",
+        id: "node-result-ilegal",
         type: "result",
-        title: "Sentença Reformada",
-        description: "Afastamento do vínculo por ausência de prova de subordinação.",
+        title: "Infração - Supressão Ilegal Pós-2008",
+        description: "Supressão não autorizada após o marco temporal estabelecido pelo Código Florestal. Sujeito a embargo da área, autuação pelo IBAMA/OEMA e obrigatoriedade de recomposição integral da APP conforme Art. 4º.",
+        simplifiedText: "Atenção: O desmatamento ocorreu após 2008. A área está em situação irregular. É necessário interromper as atividades produtivas nesse local específico e realizar o plantio para recuperar toda a área degradada para evitar bloqueio de financiamentos.",
+        benefits: [],
         references: [
           {
-            id: "ref-9",
-            type: "jurisprudence",
-            title: "Precedente Subordinação, TRT",
+            id: "ref-lei-art4",
+            type: "law",
+            title: "Art. 4º, Lei nº 12.651/2012 (Código Florestal)",
+            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
           },
-        ],
-      },
+          {
+            id: "ref-snif",
+            type: "dashboard",
+            title: "Bases de Referência - SNIF",
+            url: "https://snif.florestal.gov.br/"
+          }
+        ]
+      }
     ],
     edges: [
-      { id: "e1", source: "node-root", target: "node-preparo", label: "SIM" },
-      { id: "e2", source: "node-root", target: "node-intempestivo", label: "NÃO" },
-      { id: "e3", source: "node-preparo", target: "node-vinculo", label: "SIM" },
-      { id: "e4", source: "node-preparo", target: "node-deserto", label: "NÃO" },
-      { id: "e5", source: "node-vinculo", target: "node-procedente", label: "SIM" },
-      { id: "e6", source: "node-vinculo", target: "node-improcedente", label: "NÃO" },
-    ],
-  },
-  {
-    id: "case-2",
-    title: "Indenização por Danos Morais",
-    nodes: [
-      {
-        id: "node-root-2",
-        type: "decision",
-        title: "Ato Ilícito",
-        description: "Houve conduta ilícita, culposa ou dolosa do réu?",
-        references: [
-          {
-            id: "ref-2-1",
-            type: "law",
-            title: "Art. 186, CC",
-            url: "https://www.jusbrasil.com.br/topicos/10718503/artigo-186-da-lei-n-10406-de-10-de-janeiro-de-2002",
-          },
-        ],
-      },
-      {
-        id: "node-dano-2",
-        type: "decision",
-        title: "Dano Comprovado",
-        description: "A vítima sofreu efetivo abalo psicológico ou ofensa aos direitos de personalidade?",
-        references: [
-          {
-            id: "ref-2-2",
-            type: "law",
-            title: "Art. 5º, V, CF/88",
-            url: "https://www.jusbrasil.com.br/topicos/10647895/artigo-5-da-constituicao-federal-de-1988",
-          },
-        ],
-      },
-      {
-        id: "node-sem-ato-2",
-        type: "result",
-        title: "Ausência de Conduta",
-        description: "Improcedência. A conduta do réu estava no exercício regular de um direito.",
-        references: [
-          {
-            id: "ref-2-3",
-            type: "law",
-            title: "Art. 188, I, CC",
-            url: "https://www.jusbrasil.com.br/topicos/10718302/artigo-188-da-lei-n-10406-de-10-de-janeiro-de-2002",
-          },
-        ],
-      },
-      {
-        id: "node-nexo-2",
-        type: "decision",
-        title: "Nexo Causal",
-        description: "Existe relação direta de causa e efeito entre o ato ilícito e o dano?",
-        references: [
-          {
-            id: "ref-2-4",
-            type: "law",
-            title: "Art. 403, CC",
-            url: "https://www.jusbrasil.com.br/topicos/10708682/artigo-403-da-lei-n-10406-de-10-de-janeiro-de-2002",
-          },
-        ],
-      },
-      {
-        id: "node-sem-dano-2",
-        type: "result",
-        title: "Ausência de Dano",
-        description: "Improcedência. Mero dissabor cotidiano não gera direito a indenização moral.",
-        references: [
-          {
-            id: "ref-2-5",
-            type: "jurisprudence",
-            title: "Inadimplemento Contratual, STJ",
-          },
-        ],
-      },
-      {
-        id: "node-indenizar-2",
-        type: "result",
-        title: "Dever de Indenizar",
-        description: "Procedência da ação com arbitramento do quantum indenizatório.",
-        references: [
-          {
-            id: "ref-2-6",
-            type: "law",
-            title: "Art. 927, CC",
-            url: "https://www.jusbrasil.com.br/topicos/10675662/artigo-927-da-lei-n-10406-de-10-de-janeiro-de-2002",
-          },
-        ],
-      },
-      {
-        id: "node-sem-nexo-2",
-        type: "result",
-        title: "Ausência de Responsabilidade",
-        description: "Improcedência. Ocorrência de culpa exclusiva da vítima ou de força maior.",
-        references: [
-          {
-            id: "ref-2-7",
-            type: "doctrine",
-            title: "Responsabilidade Civil - S. Venosa",
-          },
-        ],
-      },
-    ],
-    edges: [
-      { id: "e2-1", source: "node-root-2", target: "node-dano-2", label: "SIM" },
-      { id: "e2-2", source: "node-root-2", target: "node-sem-ato-2", label: "NÃO" },
-      { id: "e2-3", source: "node-dano-2", target: "node-nexo-2", label: "SIM" },
-      { id: "e2-4", source: "node-dano-2", target: "node-sem-dano-2", label: "NÃO" },
-      { id: "e2-5", source: "node-nexo-2", target: "node-indenizar-2", label: "SIM" },
-      { id: "e2-6", source: "node-nexo-2", target: "node-sem-nexo-2", label: "NÃO" },
-    ],
-  },
+      // Se for pequeno produtor -> Vai para marco temporal do pequeno
+      { id: "edge-root-sim", source: "node-root-tamanho", target: "node-pequeno-marco", label: "SIM" },
+      // Se for grande produtor -> Vai para marco temporal do grande
+      { id: "edge-root-nao", source: "node-root-tamanho", target: "node-grande-marco", label: "NÃO" },
+      
+      // Fluxo Pequeno Produtor
+      { id: "edge-pequeno-antes", source: "node-pequeno-marco", target: "node-result-escadinha", label: "SIM" },
+      { id: "edge-pequeno-depois", source: "node-pequeno-marco", target: "node-result-ilegal", label: "NÃO" },
+      
+      // Fluxo Grande Produtor
+      { id: "edge-grande-antes", source: "node-grande-marco", target: "node-result-pra-comum", label: "SIM" },
+      { id: "edge-grande-depois", source: "node-grande-marco", target: "node-result-ilegal", label: "NÃO" }
+    ]
+  }
 ]
 
 export const useGraphStore = create<GraphState>((set) => ({
   cases: defaultCases,
-  activeCaseId: "case-1",
+  activeCaseId: "trilha-app-completa",
   focusedNodeId: null,
   readingNodeData: null,
+  isProducerView: false,
 
   setActiveCaseId: (id) => set({ activeCaseId: id, focusedNodeId: null, readingNodeData: null }),
   setFocusedNodeId: (id) => set({ focusedNodeId: id }),
   setReadingNodeData: (data) => set({ readingNodeData: data }),
+  toggleView: () => set((state) => ({ isProducerView: !state.isProducerView })),
 
   addNewCase: (title) =>
     set((state) => {
@@ -297,6 +205,7 @@ export const useGraphStore = create<GraphState>((set) => ({
             type: "decision",
             title: "Nó Inicial",
             description: "Escreva no chat para criar novas hipóteses de decisão.",
+            simplifiedText: "Nó inicial do seu processo de análise ambiental.",
             references: [
               {
                 id: `ref-init-${Date.now()}`,
@@ -336,6 +245,7 @@ export const useGraphStore = create<GraphState>((set) => ({
               type: "decision",
               title: "Nó Inicial",
               description: "Digite uma mensagem no chat para começar.",
+              simplifiedText: "Nó de início do caso para análise.",
               references: [
                 {
                   id: "ref-default-init",
