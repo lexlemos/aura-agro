@@ -9,7 +9,7 @@ export interface ReferenceItem {
 
 export interface DecisionNode {
   id: string
-  type: "decision" | "result"
+  type: "decision" | "result" | "final"
   title: string
   description: string
   simplifiedText: string
@@ -148,6 +148,26 @@ export const mockAppPayload: { nodes: DecisionNode[]; edges: Relationship[] } = 
           url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
         }
       ]
+    },
+    {
+      id: "node-result-final",
+      type: "final",
+      title: "Resumo Técnico Consolidado (Diagnóstico)",
+      description: "Parecer consolidado final. O imóvel rural foi diagnosticado sob a égide da Lei 12.651/12 (Código Florestal). Requisitos ambientais: imóveis consolidados pré-2008 têm obrigações reduzidas (escadinha de 5m a 15m para pequenos ou proporcional de 20m a 100m para médios/grandes). Áreas degradadas pós-2008 exigem recuperação integral e estão sob risco de embargos.",
+      simplifiedText: "Resumo Final do Diagnóstico: Analisamos suas respostas e a legislação. Se a supressão da sua propriedade for anterior a 2008, você tem direito a obrigações reduzidas. Imóveis com desmatamento pós-2008 exigem recomposição integral. Regularize no PRA para suspender sanções.",
+      benefits: [
+        "Consolidação de Passivos",
+        "Segurança Jurídica do CAR",
+        "Orientação de Plantio"
+      ],
+      references: [
+        {
+          id: "ref-resumo-lei",
+          type: "law",
+          title: "Código Florestal Consolidado",
+          url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+        }
+      ]
     }
   ],
   edges: [
@@ -156,7 +176,10 @@ export const mockAppPayload: { nodes: DecisionNode[]; edges: Relationship[] } = 
     { id: "edge-pequeno-antes", source: "node-pequeno-marco", target: "node-result-escadinha", label: "SIM" },
     { id: "edge-pequeno-depois", source: "node-pequeno-marco", target: "node-result-ilegal", label: "NÃO" },
     { id: "edge-grande-antes", source: "node-grande-marco", target: "node-result-pra-comum", label: "SIM" },
-    { id: "edge-grande-depois", source: "node-grande-marco", target: "node-result-ilegal", label: "NÃO" }
+    { id: "edge-grande-depois", source: "node-grande-marco", target: "node-result-ilegal", label: "NÃO" },
+    { id: "edge-final-escadinha", source: "node-result-escadinha", target: "node-result-final" },
+    { id: "edge-final-pra", source: "node-result-pra-comum", target: "node-result-final" },
+    { id: "edge-final-ilegal", source: "node-result-ilegal", target: "node-result-final" }
   ]
 };
 

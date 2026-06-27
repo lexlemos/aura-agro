@@ -25,7 +25,10 @@ import {
   PanelLeftOpen,
   Scroll,
   Book,
-  LayoutDashboard
+  LayoutDashboard,
+  Sprout,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react"
 import { FileTree, TreeItem } from "@/components/file-tree"
 import { useGraphStore, DecisionNode, Relationship, ReferenceItem, mockAppPayload } from "@/lib/store"
@@ -42,7 +45,7 @@ function getLayoutedElements(
 ): PositionedNode[] {
   const g = new dagre.graphlib.Graph()
 
-  g.setGraph({ rankdir: "TB", nodesep: 180, ranksep: 140 })
+  g.setGraph({ rankdir: "TB", nodesep: 180, ranksep: 200 })
   g.setDefaultEdgeLabel(() => ({}))
 
   nodes.forEach((node) => {
@@ -94,6 +97,32 @@ export default function DecisionTreeDashboard() {
   const [isAnimating, setIsAnimating] = React.useState(false)
   const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 })
 
+  // Zoom states
+  const [zoom, setZoom] = React.useState(1)
+  const zoomRef = React.useRef(zoom)
+  React.useEffect(() => {
+    zoomRef.current = zoom
+  }, [zoom])
+
+  // Setup wheel event listener to handle zoom with Ctrl key
+  React.useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault()
+        const delta = e.deltaY < 0 ? 0.05 : -0.05
+        setZoom((prev) => Math.min(Math.max(prev + delta, 0.4), 2.5))
+      }
+    }
+
+    viewport.addEventListener("wheel", handleWheel, { passive: false })
+    return () => {
+      viewport.removeEventListener("wheel", handleWheel)
+    }
+  }, [])
+
   const [isGenerating, setIsGenerating] = React.useState(false)
   const [prompt, setPrompt] = React.useState("")
   const [isProfileOpen, setIsProfileOpen] = React.useState(false)
@@ -106,21 +135,30 @@ export default function DecisionTreeDashboard() {
     return getLayoutedElements(activeCase.nodes, activeCase.edges)
   }, [activeCase.nodes, activeCase.edges])
 
-  // Center root node automatically on case change or root node ID change
+  // Center root node automatically on case change, root node ID change, or layout change
   React.useEffect(() => {
     const rootNode = activeCase.nodes[0]
-    if (rootNode && viewportRef.current) {
+    if (!rootNode || !viewportRef.current) return
+
+    const centerRoot = () => {
+      if (!viewportRef.current) return
       const rect = viewportRef.current.getBoundingClientRect()
       const layoutedRoot = positionedNodes.find((n) => n.id === rootNode.id)
-      if (layoutedRoot) {
-        const targetX = rect.width / 2 - layoutedRoot.x - 130
+      if (layoutedRoot && rect.width > 0) {
+        const currentZoom = zoomRef.current
+        const targetX = rect.width / 2 - (layoutedRoot.x + 130) * currentZoom
         const targetY = 80
         setPanX(targetX)
         setPanY(targetY)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCaseId, activeCase.nodes[0]?.id])
+
+    setZoom(1)
+    centerRoot()
+
+    window.addEventListener("resize", centerRoot)
+    return () => window.removeEventListener("resize", centerRoot)
+  }, [activeCaseId, activeCase.nodes[0]?.id, positionedNodes.length])
 
   // Center on layer focus
   React.useEffect(() => {
@@ -128,8 +166,9 @@ export default function DecisionTreeDashboard() {
       const node = positionedNodes.find((n) => n.id === focusedNodeId)
       if (node) {
         const rect = viewportRef.current.getBoundingClientRect()
-        const targetX = rect.width / 2 - node.x - 130
-        const targetY = rect.height / 2 - node.y - 60
+        const currentZoom = zoomRef.current
+        const targetX = rect.width / 2 - (node.x + 130) * currentZoom
+        const targetY = rect.height / 2 - (node.y + 60) * currentZoom
         
         // Only trigger state updates if the position actually changed to prevent infinite rendering loops
         if (Math.abs(panX - targetX) > 1 || Math.abs(panY - targetY) > 1) {
@@ -259,22 +298,22 @@ export default function DecisionTreeDashboard() {
         {/* Botão toggle — fora do aside para não ser cortado */}
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="absolute -right-3 top-6 z-30 h-6 w-6 rounded-full bg-zinc-500 border border-zinc-400 flex items-center justify-center text-zinc-100 hover:bg-zinc-400 hover:text-white transition-all shadow-lg cursor-pointer"
+          className="absolute -right-3 top-6 z-30 h-6 w-6 rounded-full bg-emerald-650 border border-emerald-550 flex items-center justify-center text-emerald-100 hover:bg-emerald-500 hover:text-white transition-all shadow-lg cursor-pointer"
           title={isSidebarOpen ? "Recolher menu" : "Expandir menu"}
         >
           {isSidebarOpen ? <ChevronLeft className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
         </button>
 
         <aside
-          className={`bg-zinc-700 text-zinc-100 flex flex-col h-full border-r border-zinc-600 z-10 transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-[280px]" : "w-[60px]"
+          className={`bg-emerald-950 text-emerald-50 flex flex-col h-full border-r border-emerald-900/60 z-10 transition-all duration-300 ease-in-out ${isSidebarOpen ? "w-[280px]" : "w-[60px]"
             }`}
         >
 
           <div className={`p-4 flex flex-col gap-4 ${isSidebarOpen ? "" : "items-center px-2"}`}>
             <div className="flex items-center gap-2 px-2 overflow-hidden">
-              <Scale className="h-5 w-5 text-indigo-400 fill-indigo-400/20 shrink-0" />
+              <Sprout className="h-5 w-5 text-emerald-400 fill-emerald-400/20 shrink-0" />
               {isSidebarOpen && (
-                <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-indigo-200 to-indigo-400 bg-clip-text text-transparent whitespace-nowrap">
+                <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-emerald-300 to-emerald-500 bg-clip-text text-transparent whitespace-nowrap">
                   Aura Agro
                 </span>
               )}
@@ -283,15 +322,15 @@ export default function DecisionTreeDashboard() {
             {isSidebarOpen ? (
               <button
                 onClick={() => addNewCase(`Novo Caso Decisório ${cases.length + 1}`)}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-zinc-600 hover:bg-zinc-500 text-zinc-100 border border-zinc-500 hover:border-zinc-400 transition-all font-medium text-sm shadow-sm group cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-900 hover:bg-emerald-850 text-emerald-50 border border-emerald-800 hover:border-emerald-700 transition-all font-medium text-sm shadow-sm group cursor-pointer"
               >
-                <Plus className="h-4 w-4 text-zinc-300 group-hover:text-zinc-100 transition-colors" />
+                <Plus className="h-4 w-4 text-emerald-300 group-hover:text-emerald-100 transition-colors" />
                 Novo Caso
               </button>
             ) : (
               <button
                 onClick={() => addNewCase(`Novo Caso Decisório ${cases.length + 1}`)}
-                className="w-10 h-10 flex items-center justify-center rounded-xl bg-zinc-600 hover:bg-zinc-500 text-zinc-100 border border-zinc-500 hover:border-zinc-400 transition-all cursor-pointer"
+                className="w-10 h-10 flex items-center justify-center rounded-xl bg-emerald-900 hover:bg-emerald-850 text-emerald-50 border border-emerald-800 hover:border-emerald-700 transition-all cursor-pointer"
                 title="Novo Caso"
               >
                 <Plus className="h-4 w-4" />
@@ -301,7 +340,7 @@ export default function DecisionTreeDashboard() {
 
           <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 overflow-x-hidden">
             {isSidebarOpen && (
-              <div className="px-3 py-1.5 text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+              <div className="px-3 py-1.5 text-xs font-semibold text-emerald-300/80 uppercase tracking-wider">
                 Casos em Andamento
               </div>
             )}
@@ -311,12 +350,12 @@ export default function DecisionTreeDashboard() {
                 onClick={() => setActiveCaseId(c.id)}
                 title={!isSidebarOpen ? c.title : undefined}
                 className={`group flex items-center justify-between px-3 py-2.5 rounded-lg cursor-pointer transition-all ${c.id === activeCaseId
-                    ? "bg-zinc-500 text-white font-medium shadow-sm"
-                    : "text-zinc-200 hover:bg-zinc-600/70 hover:text-white"
+                    ? "bg-emerald-850 text-white font-medium shadow-sm"
+                    : "text-emerald-100 hover:bg-emerald-900/60 hover:text-white"
                   } ${!isSidebarOpen ? "justify-center px-2" : ""}`}
               >
                 <div className={`flex items-center gap-2.5 min-w-0 ${!isSidebarOpen ? "justify-center" : ""}`}>
-                  <GitFork className="h-4 w-4 shrink-0 text-zinc-300 group-hover:text-zinc-100" />
+                  <GitFork className="h-4 w-4 shrink-0 text-emerald-300 group-hover:text-emerald-100" />
                   {isSidebarOpen && <span className="truncate text-sm">{c.title}</span>}
                 </div>
                 {isSidebarOpen && (
@@ -337,18 +376,18 @@ export default function DecisionTreeDashboard() {
 
           {/* Profile Popover */}
           {isProfileOpen && isSidebarOpen && (
-            <div className="absolute bottom-20 left-4 right-4 bg-zinc-600 border border-zinc-500 rounded-xl shadow-2xl p-2 flex flex-col gap-1 z-35 animate-in slide-in-from-bottom-2 duration-150">
+            <div className="absolute bottom-20 left-4 right-4 bg-emerald-900 border border-emerald-800 rounded-xl shadow-2xl p-2 flex flex-col gap-1 z-35 animate-in slide-in-from-bottom-2 duration-150">
               <button
                 onClick={() => {
                   setIsSettingsOpen(true)
                   setIsProfileOpen(false)
                 }}
-                className="w-full text-left px-3 py-2 text-xs font-semibold rounded-lg hover:bg-zinc-500 text-zinc-300 hover:text-white transition-colors cursor-pointer flex items-center gap-2"
+                className="w-full text-left px-3 py-2 text-xs font-semibold rounded-lg hover:bg-emerald-850 text-emerald-300 hover:text-white transition-colors cursor-pointer flex items-center gap-2"
               >
                 <Settings className="h-3.5 w-3.5" />
                 Configurações da Conta
               </button>
-              <div className="h-[1px] bg-zinc-500 my-1" />
+              <div className="h-[1px] bg-emerald-850 my-1" />
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-3 py-2 text-xs font-semibold rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors cursor-pointer flex items-center gap-2"
@@ -361,19 +400,19 @@ export default function DecisionTreeDashboard() {
 
           <div
             onClick={() => isSidebarOpen && setIsProfileOpen(!isProfileOpen)}
-            className={`p-4 border-t border-zinc-600 bg-zinc-700/80 flex items-center gap-3 transition-colors ${isSidebarOpen ? "cursor-pointer hover:bg-zinc-600/40" : "cursor-default justify-center"
+            className={`p-4 border-t border-emerald-900/60 bg-emerald-950/80 flex items-center gap-3 transition-colors ${isSidebarOpen ? "cursor-pointer hover:bg-emerald-900/30" : "cursor-default justify-center"
               }`}
           >
-            <div className="h-9 w-9 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+            <div className="h-9 w-9 rounded-full bg-emerald-650 flex items-center justify-center text-white font-semibold text-sm shrink-0">
               AL
             </div>
             {isSidebarOpen && (
               <>
                 <div className="flex flex-col min-w-0 flex-1">
                   <span className="text-sm font-semibold text-zinc-100 truncate">Allex Lemes</span>
-                  <span className="text-xs text-zinc-300 truncate">allex@auraagro.com</span>
+                  <span className="text-xs text-emerald-300 truncate">allex@auraagro.com</span>
                 </div>
-                <Settings className="h-4 w-4 text-zinc-400 hover:text-zinc-200 transition-colors" />
+                <Settings className="h-4 w-4 text-emerald-400 hover:text-emerald-200 transition-colors" />
               </>
             )}
           </div>
@@ -381,7 +420,7 @@ export default function DecisionTreeDashboard() {
       </div>
 
       {/* 2. ÁREA CENTRAL - Playground Canvas */}
-      <main className="flex-1 flex flex-col h-full relative bg-zinc-50 dark:bg-zinc-900 overflow-hidden pr-[300px]">
+      <main className="flex-1 flex flex-col h-full relative bg-zinc-50 dark:bg-zinc-900 overflow-hidden">
 
         <header className="h-14 border-b border-zinc-200 dark:border-zinc-800 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-md px-6 flex items-center justify-between z-10">
           <div className="flex items-center gap-4">
@@ -445,7 +484,7 @@ export default function DecisionTreeDashboard() {
 
           <div
             style={{
-              transform: `translate(${panX}px, ${panY}px)`,
+              transform: `translate(${panX}px, ${panY}px) scale(${zoom})`,
               width: "2400px",
               height: "2400px",
             }}
@@ -453,22 +492,52 @@ export default function DecisionTreeDashboard() {
               }`}
           >
 
-            <EdgeRenderer edges={activeCase.edges} nodes={positionedNodes} />
-
             <NodeRenderer
               nodes={positionedNodes}
               focusedNodeId={focusedNodeId}
               onCardClick={setReadingNodeData}
             />
 
+            <EdgeRenderer edges={activeCase.edges} nodes={positionedNodes} />
+
+          </div>
+
+          {/* Floating Zoom Controls */}
+          <div className="absolute bottom-6 right-6 z-10 flex items-center gap-1.5 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800/80 rounded-xl p-1.5 shadow-lg select-none">
+            <button
+              type="button"
+              onClick={() => setZoom((prev) => Math.max(prev - 0.1, 0.4))}
+              className="h-8 w-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+              title="Diminuir Zoom"
+            >
+              <ZoomOut className="h-4 w-4" />
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => setZoom(1)}
+              className="px-2 text-xs font-bold text-zinc-600 dark:text-zinc-350 hover:text-emerald-600 dark:hover:text-emerald-450 hover:bg-zinc-50 dark:hover:bg-zinc-800/50 py-1 rounded transition-colors cursor-pointer"
+              title="Resetar Zoom para 100%"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setZoom((prev) => Math.min(prev + 0.1, 2.5))}
+              className="h-8 w-8 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 flex items-center justify-center text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white transition-colors cursor-pointer"
+              title="Aumentar Zoom"
+            >
+              <ZoomIn className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
         {/* Floating Input */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-[calc(50%+150px)] w-full max-w-2xl px-4 z-10">
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-2xl px-4 z-10">
           <form
             onSubmit={handlePromptSubmit}
-            className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-xl flex items-center p-2 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:focus-within:ring-indigo-400/20 transition-all ${
+            className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-xl flex items-center p-2 focus-within:ring-2 focus-within:ring-emerald-500/20 dark:focus-within:ring-emerald-400/20 transition-all ${
               isGenerating ? "bg-gray-100 dark:bg-zinc-900/50 animate-pulse" : ""
             }`}
           >
@@ -489,7 +558,7 @@ export default function DecisionTreeDashboard() {
             <button
               type="submit"
               disabled={isGenerating}
-              className={`h-9 w-9 rounded-xl bg-indigo-650 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white flex items-center justify-center transition-colors shrink-0 shadow-sm ${
+              className={`h-9 w-9 rounded-xl bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white flex items-center justify-center transition-colors shrink-0 shadow-sm ${
                 isGenerating ? "cursor-not-allowed opacity-50" : "cursor-pointer"
               }`}
               title="Inserir nó jurídico"
@@ -500,28 +569,6 @@ export default function DecisionTreeDashboard() {
         </div>
 
       </main>
-
-      {/* 3. SIDEBAR DIREITA - Árvore de Camadas estilo Figma */}
-      <aside className="absolute top-6 right-6 bottom-6 w-[280px] bg-white/95 dark:bg-zinc-900/95 backdrop-blur-md border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden z-20">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-150 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50">
-          <div className="flex items-center gap-2">
-            <Layers className="h-4 w-4 text-zinc-400 dark:text-zinc-550" />
-            <span className="text-xs font-bold uppercase tracking-wider text-zinc-550 dark:text-zinc-400">
-              Componentes (Layers)
-            </span>
-          </div>
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold">
-            {activeCase.nodes.length} Nós
-          </span>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-3">
-          <FileTree
-            data={layersData}
-            onFileSelect={handleLayerSelect}
-          />
-        </div>
-      </aside>
 
       {/* 4. MODAL DE CONFIGURAÇÕES DE CONTA */}
       {isSettingsOpen && (
@@ -546,7 +593,7 @@ export default function DecisionTreeDashboard() {
                 <input
                   type="text"
                   defaultValue="Allex Lemes"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-855 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-855 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
               <div>
@@ -554,7 +601,7 @@ export default function DecisionTreeDashboard() {
                 <input
                   type="email"
                   defaultValue="allex@auraagro.com"
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-855 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-800 bg-transparent text-zinc-855 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
               <div>
@@ -576,7 +623,7 @@ export default function DecisionTreeDashboard() {
               </button>
               <button
                 onClick={() => setIsSettingsOpen(false)}
-                className="px-4 py-2 text-xs font-bold rounded-lg bg-indigo-650 hover:bg-indigo-700 text-white cursor-pointer"
+                className="px-4 py-2 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
               >
                 Salvar Configurações
               </button>
@@ -612,6 +659,19 @@ interface EdgeRendererProps {
 }
 
 const EdgeRenderer = React.memo(function EdgeRenderer({ edges, nodes }: EdgeRendererProps) {
+  const [heights, setHeights] = React.useState<Record<string, number>>({})
+
+  React.useEffect(() => {
+    const newHeights: Record<string, number> = {}
+    nodes.forEach((node) => {
+      const el = document.getElementById(node.id)
+      if (el) {
+        newHeights[node.id] = el.offsetHeight
+      }
+    })
+    setHeights(newHeights)
+  }, [nodes])
+
   return (
     <svg className="absolute inset-0 pointer-events-none w-full h-full z-0">
       <defs>
@@ -632,14 +692,21 @@ const EdgeRenderer = React.memo(function EdgeRenderer({ edges, nodes }: EdgeRend
         const child = nodes.find((n) => n.id === edge.target)
         if (!parent || !child) return null
 
+        const parentHeight = heights[parent.id] || 120
+
         const x1 = parent.x + 130
-        const y1 = parent.y + 120
+        const y1 = parent.y + parentHeight
 
         const x2 = child.x + 130
         const y2 = child.y
 
         const midY = (y1 + y2) / 2
         const pathD = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`
+
+        // Calculate label position at t = 0.35 to avoid overlap of crossing lines
+        const labelT = 0.35
+        const labelX = x1 + (x2 - x1) * labelT
+        const labelY = y1 + (y2 - y1) * labelT
 
         return (
           <g key={edge.id}>
@@ -652,18 +719,18 @@ const EdgeRenderer = React.memo(function EdgeRenderer({ edges, nodes }: EdgeRend
             {edge.label && (
               <g>
                 <rect
-                  x={x1 + (x2 - x1) / 3 - 12}
-                  y={y1 + (y2 - y1) / 3 - 8}
-                  width="24"
-                  height="16"
-                  rx="4"
-                  className="fill-white dark:fill-zinc-900 stroke-zinc-200 dark:stroke-zinc-800 stroke-[1px]"
+                  x={labelX - 18}
+                  y={labelY - 10}
+                  width="36"
+                  height="20"
+                  rx="6"
+                  className="fill-white dark:fill-zinc-950 stroke-zinc-300 dark:stroke-zinc-700 stroke-[1.5px] shadow-xs"
                 />
                 <text
-                  x={x1 + (x2 - x1) / 3}
-                  y={y1 + (y2 - y1) / 3 + 4}
+                  x={labelX}
+                  y={labelY + 4}
                   textAnchor="middle"
-                  className={`text-[10px] font-bold tracking-wider ${edge.label === "SIM"
+                  className={`text-[11px] font-extrabold tracking-wider ${edge.label === "SIM"
                       ? "fill-emerald-600 dark:fill-emerald-400"
                       : "fill-red-500 dark:fill-red-400"
                     }`}
@@ -710,14 +777,20 @@ const NodeRenderer = React.memo(function NodeRenderer({ nodes, focusedNodeId, on
             onClick={handleClick}
             style={{ left: `${node.x}px`, top: `${node.y}px` }}
             className={`absolute w-[260px] min-h-[120px] rounded-xl border bg-white dark:bg-zinc-900 p-4 transition-all duration-200 flex flex-col gap-2 decision-node-card select-none cursor-pointer ${isFocused
-                ? "ring-2 ring-indigo-500 border-indigo-500 dark:ring-indigo-400 dark:border-indigo-400 shadow-md scale-105 z-10"
-                : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 shadow-sm"
+                ? "ring-2 ring-emerald-500 border-emerald-500 dark:ring-emerald-400 dark:border-emerald-400 shadow-md scale-105 z-10"
+                : node.type === "final"
+                ? "border-emerald-550 dark:border-emerald-500/60 hover:border-emerald-600 dark:hover:border-emerald-400 shadow-sm"
+                : "border-emerald-500/45 dark:border-emerald-500/25 hover:border-emerald-500 dark:hover:border-emerald-400 shadow-sm"
               }`}
           >
             <div className="flex items-center justify-between">
               {node.id === "node-root-inicio" ? (
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide bg-indigo-100 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-400">
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-450">
                   Início
+                </span>
+              ) : node.type === "final" ? (
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-400">
+                  Final
                 </span>
               ) : (
                 <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${node.type === "decision"
@@ -734,7 +807,11 @@ const NodeRenderer = React.memo(function NodeRenderer({ nodes, focusedNodeId, on
               {node.title}
             </h4>
 
-            <p className="text-xs text-zinc-550 dark:text-zinc-400 leading-relaxed min-h-[40px] break-words">
+            <p className={`text-xs leading-relaxed min-h-[40px] break-words ${
+              node.type === "decision"
+                ? "font-bold text-zinc-800 dark:text-zinc-150"
+                : "text-zinc-550 dark:text-zinc-400"
+            }`}>
               {isProducerView ? node.simplifiedText : node.description}
             </p>
           </div>
@@ -795,9 +872,14 @@ function NodeDetailsDrawer({ node, onClose }: NodeDetailsDrawerProps) {
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-150 dark:border-zinc-850">
         <div className="flex items-center gap-2">
-          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${node.type === "decision" ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450" : "bg-zinc-100 text-zinc-850 dark:bg-zinc-800 dark:text-zinc-300"
-            }`}>
-            {node.type === "decision" ? "Decisão" : "Resultado"}
+          <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${
+            node.type === "decision"
+              ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450"
+              : node.type === "final"
+              ? "bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-400"
+              : "bg-zinc-100 text-zinc-850 dark:bg-zinc-800 dark:text-zinc-300"
+          }`}>
+            {node.type === "decision" ? "Decisão" : node.type === "final" ? "Final" : "Resultado"}
           </span>
           <h3 className="text-sm font-bold truncate max-w-[180px]">{node.title}</h3>
         </div>
@@ -839,7 +921,7 @@ function NodeDetailsDrawer({ node, onClose }: NodeDetailsDrawerProps) {
         {/* References Section */}
         <div className="space-y-3">
           <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Scale className="h-4 w-4 text-indigo-500" />
+            <Scale className="h-4 w-4 text-emerald-550 dark:text-emerald-400" />
             Citações & Referências Jurídicas
           </h4>
 
