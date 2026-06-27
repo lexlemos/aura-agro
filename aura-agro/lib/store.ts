@@ -21,7 +21,7 @@ export interface Relationship {
   id: string
   source: string
   target: string
-  label: "SIM" | "NÃO"
+  label?: "SIM" | "NÃO"
 }
 
 export interface CaseItem {
@@ -44,7 +44,121 @@ interface GraphState {
   addNewCase: (title: string) => void
   deleteCase: (id: string) => void
   addCustomNode: (caseId: string, node: DecisionNode, edge: Relationship) => void
+  setCaseGraph: (caseId: string, nodes: DecisionNode[], edges: Relationship[]) => void
 }
+
+export const mockAppPayload: { nodes: DecisionNode[]; edges: Relationship[] } = {
+  nodes: [
+    {
+      id: "node-root-tamanho",
+      type: "decision",
+      title: "Classificação Fundiária (Art. 3º, V)",
+      description: "O imóvel rural atende ao conceito de pequena propriedade rural (área de até 4 módulos fiscais), conforme disposto no Art. 3º, inciso V da Lei nº 12.651/2012?",
+      simplifiedText: "Sua propriedade rural possui até 4 Módulos Fiscais? (Esse é o limite da lei para ser considerado pequeno produtor)",
+      references: [
+        {
+          id: "ref-lei-art3",
+          type: "law",
+          title: "Art. 3º, V, Lei 12.651/12",
+          url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+        }
+      ]
+    },
+    {
+      id: "node-pequeno-marco",
+      type: "decision",
+      title: "Marco Temporal (Pequeno Produtor)",
+      description: "Conforme o Art. 61-A, caput, a supressão de vegetação nativa na Área de Preservação Permanente (APP) ocorreu até 22 de julho de 2008 (área rural consolidada)?",
+      simplifiedText: "O desmatamento ou ocupação da área perto do rio começou antes de 22 de julho de 2008?",
+      references: [
+        {
+          id: "ref-lei-art61a",
+          type: "law",
+          title: "Art. 61-A, Lei 12.651/12",
+          url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+        }
+      ]
+    },
+    {
+      id: "node-grande-marco",
+      type: "decision",
+      title: "Marco Temporal (Médio/Grande Produtor)",
+      description: "Para imóveis superiores a 4 módulos fiscais, as atividades agrossilvipastoris na Área de Preservação Permanente (APP) foram consolidadas até 22 de julho de 2008?",
+      simplifiedText: "Como sua propriedade é maior que 4 módulos fiscais, a ocupação perto do rio é antiga e aconteceu antes de 22 de julho de 2008?",
+      references: [
+        {
+          id: "ref-lei-art61a-grande",
+          type: "law",
+          title: "Art. 61-A, Lei 12.651/12",
+          url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+        }
+      ]
+    },
+    {
+      id: "node-result-escadinha",
+      type: "result",
+      title: "Recomposição Reduzida (Art. 61-A, § 1º ao § 4º)",
+      description: "Direito à recomposição de APP em faixas menores: 5m (até 1 módulo fiscal), 8m (1 a 2 módulos) ou 15m (2 a 4 módulos). Suspensão de sanções garantida mediante adesão ao PRA (Art. 59, § 4º).",
+      simplifiedText: "Boas notícias! Pela 'regra da escadinha' do Código Florestal, você só precisará recuperar uma pequena faixa (de 5 a 15 metros) da margem do rio. Aderindo ao PRA, suas multas antigas serão suspensas.",
+      benefits: [
+        "Suspensão de Multas (Art. 59)",
+        "Recuperação de APP Reduzida",
+        "Acesso ao Crédito Rural"
+      ],
+      references: [
+        {
+          id: "ref-manual-pra",
+          type: "manual",
+          title: "Manual do PRA (Módulo de Regularização)",
+          url: "https://www.car.gov.br/publico/manuais/Manual_de_Apoio_CAR.pdf"
+        }
+      ]
+    },
+    {
+      id: "node-result-pra-comum",
+      type: "result",
+      title: "Recomposição Proporcional (Art. 61-A, § 6º)",
+      description: "Área consolidada reconhecida. Para imóveis acima de 4 módulos, a recomposição da APP será de no mínimo 20 metros até no máximo 100 metros, conforme a largura do curso d'água. Exige adesão ao PRA.",
+      simplifiedText: "Como o uso é anterior a 2008, você tem direito a participar do PRA para regularizar multas. No entanto, precisará recuperar faixas maiores (mínimo de 20 metros) por conta do tamanho da sua propriedade.",
+      benefits: [
+        "Adesão ao PRA Autorizada",
+        "Regularização de Passivo"
+      ],
+      references: [
+        {
+          id: "ref-lei-art61a-paragrafo6",
+          type: "law",
+          title: "Art. 61-A, § 6º, Lei 12.651/12",
+          url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+        }
+      ]
+    },
+    {
+      id: "node-result-ilegal",
+      type: "result",
+      title: "Infração - Área Não Consolidada (Art. 4º)",
+      description: "Supressão não autorizada após 22 de julho de 2008. Não há direito aos benefícios de área consolidada. Obrigatoriedade de recomposição integral das faixas marginais (ex: 30 metros para rios de até 10m), sujeito a embargo.",
+      simplifiedText: "Atenção: O desmatamento ocorreu após 2008. A lei exige a recuperação total da área (pelo menos 30 metros de mata ciliar para rios pequenos). Regularize o quanto antes para não sofrer multas e embargo ambiental.",
+      benefits: [],
+      references: [
+        {
+          id: "ref-lei-art4",
+          type: "law",
+          title: "Art. 4º, Lei 12.651/12",
+          url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+        }
+      ]
+    }
+  ],
+  edges: [
+    { id: "edge-root-sim", source: "node-root-tamanho", target: "node-pequeno-marco", label: "SIM" },
+    { id: "edge-root-nao", source: "node-root-tamanho", target: "node-grande-marco", label: "NÃO" },
+    { id: "edge-pequeno-antes", source: "node-pequeno-marco", target: "node-result-escadinha", label: "SIM" },
+    { id: "edge-pequeno-depois", source: "node-pequeno-marco", target: "node-result-ilegal", label: "NÃO" },
+    { id: "edge-grande-antes", source: "node-grande-marco", target: "node-result-pra-comum", label: "SIM" },
+    { id: "edge-grande-depois", source: "node-grande-marco", target: "node-result-ilegal", label: "NÃO" }
+  ]
+};
 
 const defaultCases: CaseItem[] = [
   {
@@ -52,132 +166,28 @@ const defaultCases: CaseItem[] = [
     title: "Trilha de Regularização de APP (Marco Temporal)",
     nodes: [
       {
-        id: "node-root-tamanho",
+        id: "node-root-inicio",
         type: "decision",
-        title: "Classificação Fundiária",
-        description: "O imóvel rural possui área total líquida de ATÉ 4 (quatro) módulos fiscais, enquadrando-se no conceito de pequena propriedade ou posse rural familiar?",
-        simplifiedText: "O tamanho total da sua propriedade é de até 4 Módulos Fiscais? (Considerada uma pequena propriedade)",
+        title: "Bem-vindo à Aura Agro",
+        description: "Olá! Descreva a situação do seu imóvel rural ou faça uma pergunta sobre a conformidade do CAR (Cadastro Ambiental Rural) e das Áreas de Preservação Permanente (APP) para começarmos.",
+        simplifiedText: "Olá! Conte-nos um pouco sobre a sua propriedade rural para analisarmos a sua situação com o CAR.",
         references: [
           {
-            id: "ref-lei-pequeno",
+            id: "ref-codigo-florestal",
             type: "law",
-            title: "Art. 3º, V, Lei nº 12.651/2012 (Código Florestal)",
-            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+            title: "Código Florestal (Lei nº 12.651/2012)",
+            url: "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
           },
           {
-            id: "ref-manual-car",
-            type: "manual",
-            title: "Manual do CAR - Conceitos Básicos",
-            url: "https://www.car.gov.br/publico/manuais/Manual_de_Apoio_CAR.pdf"
-          }
-        ]
-      },
-      {
-        id: "node-pequeno-marco",
-        type: "decision",
-        title: "Marco Temporal (Pequeno Produtor)",
-        description: "A supressão de vegetação nativa na Área de Preservação Permanente (APP) constitui área rural consolidada, ou seja, ocorreu ANTES de 22 de julho de 2008?",
-        simplifiedText: "O desmatamento ou o uso dessa área perto do rio (para plantio ou pasto) começou antes de julho de 2008?",
-        references: [
-          {
-            id: "ref-decreto-consolidada",
+            id: "ref-decreto-car",
             type: "decree",
-            title: "Art. 2º, IV, Decreto nº 7.830/2012",
-            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/decreto/d7830.htm"
-          }
-        ]
-      },
-      {
-        id: "node-grande-marco",
-        type: "decision",
-        title: "Marco Temporal (Médio/Grande Produtor)",
-        description: "Para imóveis acima de 4 módulos fiscais, a ocupação antrópica na Área de Preservação Permanente (APP) ocorreu ANTES de 22 de julho de 2008?",
-        simplifiedText: "Como sua propriedade é maior que 4 módulos fiscais, o uso da área perto do rio começou antes de julho de 2008?",
-        references: [
-          {
-            id: "ref-lei-marco",
-            type: "law",
-            title: "Art. 61-A, Lei nº 12.651/2012",
-            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
-          }
-        ]
-      },
-      {
-        id: "node-result-escadinha",
-        type: "result",
-        title: "Regularização - Regra da Escadinha",
-        description: "Imóvel elegível à recomposição reduzida de APP (Regra da Escadinha) proporcional ao tamanho da propriedade. Suspensão imediata de sanções mediante adesão ao Programa de Regularização Ambiental (PRA).",
-        simplifiedText: "Excelente notícia! Como sua propriedade é pequena e o uso é antigo (antes de 2008), você tem direito a regras mais brandas. A faixa de mata a ser recuperada será menor e você não pagará multas retroativas. Basta aderir ao PRA.",
-        benefits: [
-          "Isenção de Multas Pretéritas",
-          "Faixa de Recuperação Reduzida",
-          "Garantia de Crédito Rural (PRONAF)"
-        ],
-        references: [
-          {
-            id: "ref-painel-pra",
-            type: "dashboard",
-            title: "Painel da Regularização Ambiental",
-            url: "https://www.florestal.gov.br/painel-da-regularizacao-ambiental"
-          }
-        ]
-      },
-      {
-        id: "node-result-pra-comum",
-        type: "result",
-        title: "Regularização - Recomposição Padrão",
-        description: "Área consolidada reconhecida. Obrigatória a recomposição das faixas marginais conforme larguras mínimas do Art. 61-A, sem os redutores da pequena propriedade. Exigida adesão ao PRA para conversão de multas.",
-        simplifiedText: "Como o uso é antigo (antes de 2008), você pode converter suas multas aderindo ao PRA (Programa de Regularização Ambiental), mas terá que recuperar a faixa padrão de mata ciliar exigida para o tamanho da sua propriedade.",
-        benefits: [
-          "Conversão de Multas (Adesão ao PRA)",
-          "Acesso Mantido ao Crédito Agrícola"
-        ],
-        references: [
-          {
-            id: "ref-lei-61a",
-            type: "law",
-            title: "Art. 61-A, Lei nº 12.651/2012",
-            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
-          }
-        ]
-      },
-      {
-        id: "node-result-ilegal",
-        type: "result",
-        title: "Infração - Supressão Ilegal Pós-2008",
-        description: "Supressão não autorizada após o marco temporal estabelecido pelo Código Florestal. Sujeito a embargo da área, autuação pelo IBAMA/OEMA e obrigatoriedade de recomposição integral da APP conforme Art. 4º.",
-        simplifiedText: "Atenção: O desmatamento ocorreu após 2008. A área está em situação irregular. É necessário interromper as atividades produtivas nesse local específico e realizar o plantio para recuperar toda a área degradada para evitar bloqueio de financiamentos.",
-        benefits: [],
-        references: [
-          {
-            id: "ref-lei-art4",
-            type: "law",
-            title: "Art. 4º, Lei nº 12.651/2012 (Código Florestal)",
-            url: "http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
-          },
-          {
-            id: "ref-snif",
-            type: "dashboard",
-            title: "Bases de Referência - SNIF",
-            url: "https://snif.florestal.gov.br/"
+            title: "Regulamento do CAR (Decreto nº 7.830/2012)",
+            url: "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/decreto/d7830.htm"
           }
         ]
       }
     ],
-    edges: [
-      // Se for pequeno produtor -> Vai para marco temporal do pequeno
-      { id: "edge-root-sim", source: "node-root-tamanho", target: "node-pequeno-marco", label: "SIM" },
-      // Se for grande produtor -> Vai para marco temporal do grande
-      { id: "edge-root-nao", source: "node-root-tamanho", target: "node-grande-marco", label: "NÃO" },
-      
-      // Fluxo Pequeno Produtor
-      { id: "edge-pequeno-antes", source: "node-pequeno-marco", target: "node-result-escadinha", label: "SIM" },
-      { id: "edge-pequeno-depois", source: "node-pequeno-marco", target: "node-result-ilegal", label: "NÃO" },
-      
-      // Fluxo Grande Produtor
-      { id: "edge-grande-antes", source: "node-grande-marco", target: "node-result-pra-comum", label: "SIM" },
-      { id: "edge-grande-depois", source: "node-grande-marco", target: "node-result-ilegal", label: "NÃO" }
-    ]
+    edges: []
   }
 ]
 
@@ -281,6 +291,20 @@ export const useGraphStore = create<GraphState>((set) => ({
             ...c,
             nodes: [...c.nodes, node],
             edges: [...c.edges, edge],
+          }
+        }
+        return c
+      }),
+    })),
+
+  setCaseGraph: (caseId, nodes, edges) =>
+    set((state) => ({
+      cases: state.cases.map((c) => {
+        if (c.id === caseId) {
+          return {
+            ...c,
+            nodes,
+            edges,
           }
         }
         return c

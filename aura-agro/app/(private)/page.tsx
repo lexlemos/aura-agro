@@ -28,7 +28,7 @@ import {
   LayoutDashboard
 } from "lucide-react"
 import { FileTree, TreeItem } from "@/components/file-tree"
-import { useGraphStore, DecisionNode, Relationship, ReferenceItem } from "@/lib/store"
+import { useGraphStore, DecisionNode, Relationship, ReferenceItem, mockAppPayload } from "@/lib/store"
 
 interface PositionedNode extends DecisionNode {
   x: number
@@ -42,11 +42,11 @@ function getLayoutedElements(
 ): PositionedNode[] {
   const g = new dagre.graphlib.Graph()
 
-  g.setGraph({ rankdir: "TB", nodesep: 140, ranksep: 100 })
+  g.setGraph({ rankdir: "TB", nodesep: 180, ranksep: 140 })
   g.setDefaultEdgeLabel(() => ({}))
 
   nodes.forEach((node) => {
-    g.setNode(node.id, { width: 220, height: 110 })
+    g.setNode(node.id, { width: 260, height: 120 })
   })
 
   edges.forEach((edge) => {
@@ -61,8 +61,8 @@ function getLayoutedElements(
     const y = nodeInfo && typeof nodeInfo.y === "number" && !isNaN(nodeInfo.y) ? nodeInfo.y : 0
     return {
       ...node,
-      x: x - 110,
-      y: y - 55,
+      x: x - 130,
+      y: y - 60,
     }
   })
 }
@@ -84,6 +84,7 @@ export default function DecisionTreeDashboard() {
     addNewCase,
     deleteCase,
     addCustomNode,
+    setCaseGraph,
   } = useGraphStore()
 
   // Pan states
@@ -93,6 +94,7 @@ export default function DecisionTreeDashboard() {
   const [isAnimating, setIsAnimating] = React.useState(false)
   const [dragStart, setDragStart] = React.useState({ x: 0, y: 0 })
 
+  const [isGenerating, setIsGenerating] = React.useState(false)
   const [prompt, setPrompt] = React.useState("")
   const [isProfileOpen, setIsProfileOpen] = React.useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false)
@@ -104,21 +106,21 @@ export default function DecisionTreeDashboard() {
     return getLayoutedElements(activeCase.nodes, activeCase.edges)
   }, [activeCase.nodes, activeCase.edges])
 
-  // Center root node automatically on case change
+  // Center root node automatically on case change or root node ID change
   React.useEffect(() => {
     const rootNode = activeCase.nodes[0]
     if (rootNode && viewportRef.current) {
       const rect = viewportRef.current.getBoundingClientRect()
       const layoutedRoot = positionedNodes.find((n) => n.id === rootNode.id)
       if (layoutedRoot) {
-        const targetX = rect.width / 2 - layoutedRoot.x - 110
+        const targetX = rect.width / 2 - layoutedRoot.x - 130
         const targetY = 80
         setPanX(targetX)
         setPanY(targetY)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCaseId])
+  }, [activeCaseId, activeCase.nodes[0]?.id])
 
   // Center on layer focus
   React.useEffect(() => {
@@ -126,8 +128,8 @@ export default function DecisionTreeDashboard() {
       const node = positionedNodes.find((n) => n.id === focusedNodeId)
       if (node) {
         const rect = viewportRef.current.getBoundingClientRect()
-        const targetX = rect.width / 2 - node.x - 110
-        const targetY = rect.height / 2 - node.y - 55
+        const targetX = rect.width / 2 - node.x - 130
+        const targetY = rect.height / 2 - node.y - 60
         
         // Only trigger state updates if the position actually changed to prevent infinite rendering loops
         if (Math.abs(panX - targetX) > 1 || Math.abs(panY - targetY) > 1) {
@@ -179,48 +181,54 @@ export default function DecisionTreeDashboard() {
 
   const handlePromptSubmit = React.useCallback((e: React.FormEvent) => {
     e.preventDefault()
-    if (!prompt.trim()) return
+    if (!prompt.trim() || isGenerating) return
 
-    const parentNodeId = focusedNodeId || activeCase.nodes[0]?.id
-    if (!parentNodeId) return
-
-    const trimmedPrompt = prompt.toLowerCase()
-    const newNodeId = `node-custom-${Date.now()}`
-    const isNo = trimmedPrompt.includes("não") || trimmedPrompt.includes("improcedente")
-    const isEmpty = trimmedPrompt.includes("vazio") || trimmedPrompt.includes("sem lei") || trimmedPrompt.includes("sem citação")
-
-    const newNode: DecisionNode = {
-      id: newNodeId,
-      type:
-        trimmedPrompt.includes("sentença") || trimmedPrompt.includes("fim") || trimmedPrompt.includes("extinção")
-          ? "result"
-          : "decision",
-      title: prompt.substring(0, 20) + (prompt.length > 20 ? "..." : ""),
-      description: prompt,
-      simplifiedText: `[Produtor] ${prompt}`,
-      references: isEmpty ? [] : [
-        {
-          id: `ref-custom-${Date.now()}`,
-          type: "manual",
-          title: "Precedente de IA",
-        }
-      ],
-    }
-
-    const newEdge: Relationship = {
-      id: `edge-custom-${Date.now()}`,
-      source: parentNodeId,
-      target: newNodeId,
-      label: isNo ? "NÃO" : "SIM",
-    }
-
-    addCustomNode(activeCaseId, newNode, newEdge)
-    setPrompt("")
+    // Capture the prompt value at submission time so it's stable inside the timeout
+    const submittedPrompt = prompt
+    setIsGenerating(true)
 
     setTimeout(() => {
-      setFocusedNodeId(newNodeId)
-    }, 50)
-  }, [prompt, focusedNodeId, activeCase.nodes, activeCaseId, addCustomNode, setFocusedNodeId])
+      // 1. Build the updated welcome node with the user's question
+      const updatedWelcomeNode: DecisionNode = {
+        id: "node-root-inicio",
+        type: "decision",
+        title: "Análise Solicitada",
+        description: submittedPrompt,
+        simplifiedText: submittedPrompt,
+        references: [
+          {
+            id: "ref-codigo-florestal",
+            type: "law",
+            title: "Código Florestal (Lei nº 12.651/2012)",
+            url: "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/lei/l12651.htm"
+          },
+          {
+            id: "ref-decreto-car",
+            type: "decree",
+            title: "Regulamento do CAR (Decreto nº 7.830/2012)",
+            url: "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2012/decreto/d7830.htm"
+          }
+        ]
+      }
+
+      // 2. Merge: updated welcome node + all mock nodes
+      const mergedNodes: DecisionNode[] = [updatedWelcomeNode, ...mockAppPayload.nodes]
+
+      // 3. New edge connecting the welcome node to the first mock node
+      const bridgeEdge: Relationship = {
+        id: "edge-prompt-to-mock",
+        source: "node-root-inicio",
+        target: "node-root-tamanho",
+      }
+
+      // 4. Merge: bridge edge + all mock edges
+      const mergedEdges: Relationship[] = [bridgeEdge, ...mockAppPayload.edges]
+
+      setCaseGraph(activeCaseId, mergedNodes, mergedEdges)
+      setIsGenerating(false)
+      setPrompt("")
+    }, 2500)
+  }, [prompt, isGenerating, activeCaseId, setCaseGraph])
 
   const handleLogout = () => {
     localStorage.removeItem("auth")
@@ -460,22 +468,30 @@ export default function DecisionTreeDashboard() {
         <div className="absolute bottom-6 left-1/2 -translate-x-[calc(50%+150px)] w-full max-w-2xl px-4 z-10">
           <form
             onSubmit={handlePromptSubmit}
-            className="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-xl flex items-center p-2 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:focus-within:ring-indigo-400/20 transition-all"
+            className={`bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-2xl shadow-xl flex items-center p-2 focus-within:ring-2 focus-within:ring-indigo-500/20 dark:focus-within:ring-indigo-400/20 transition-all ${
+              isGenerating ? "bg-gray-100 dark:bg-zinc-900/50 animate-pulse" : ""
+            }`}
           >
             <input
               type="text"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
+              disabled={isGenerating}
               placeholder={
-                focusedNodeId
-                  ? "Adicionar nó conectado (digite 'vazio' para testar estado sem citações)..."
-                  : "Selecione um nó acima e digite para adicionar ramificações..."
+                isGenerating
+                  ? "Aura Agro está analisando a legislação..."
+                  : "Descreva a situação do imóvel..."
               }
-              className="flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none border-none placeholder-zinc-400 dark:placeholder-zinc-500 text-zinc-900 dark:text-zinc-100"
+              className={`flex-1 bg-transparent px-4 py-2 text-sm focus:outline-none border-none placeholder-zinc-400 dark:placeholder-zinc-500 text-zinc-900 dark:text-zinc-100 ${
+                isGenerating ? "cursor-not-allowed" : ""
+              }`}
             />
             <button
               type="submit"
-              className="h-9 w-9 rounded-xl bg-indigo-650 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white flex items-center justify-center transition-colors shrink-0 shadow-sm cursor-pointer"
+              disabled={isGenerating}
+              className={`h-9 w-9 rounded-xl bg-indigo-650 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-600 text-white flex items-center justify-center transition-colors shrink-0 shadow-sm ${
+                isGenerating ? "cursor-not-allowed opacity-50" : "cursor-pointer"
+              }`}
               title="Inserir nó jurídico"
             >
               <Send className="h-4 w-4" />
@@ -616,10 +632,10 @@ const EdgeRenderer = React.memo(function EdgeRenderer({ edges, nodes }: EdgeRend
         const child = nodes.find((n) => n.id === edge.target)
         if (!parent || !child) return null
 
-        const x1 = parent.x + 110
-        const y1 = parent.y + 110
+        const x1 = parent.x + 130
+        const y1 = parent.y + 120
 
-        const x2 = child.x + 110
+        const x2 = child.x + 130
         const y2 = child.y
 
         const midY = (y1 + y2) / 2
@@ -693,18 +709,24 @@ const NodeRenderer = React.memo(function NodeRenderer({ nodes, focusedNodeId, on
             onMouseDown={handleMouseDown}
             onClick={handleClick}
             style={{ left: `${node.x}px`, top: `${node.y}px` }}
-            className={`absolute w-[220px] rounded-xl border bg-white dark:bg-zinc-900 p-4 transition-all duration-200 flex flex-col gap-2 decision-node-card select-none cursor-pointer ${isFocused
+            className={`absolute w-[260px] min-h-[120px] rounded-xl border bg-white dark:bg-zinc-900 p-4 transition-all duration-200 flex flex-col gap-2 decision-node-card select-none cursor-pointer ${isFocused
                 ? "ring-2 ring-indigo-500 border-indigo-500 dark:ring-indigo-400 dark:border-indigo-400 shadow-md scale-105 z-10"
                 : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 dark:hover:border-zinc-700 shadow-sm"
               }`}
           >
             <div className="flex items-center justify-between">
-              <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${node.type === "decision"
-                  ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450"
-                  : "bg-zinc-100 text-zinc-850 dark:bg-zinc-800 dark:text-zinc-350"
-                }`}>
-                {node.type === "decision" ? "Decisão" : "Resultado"}
-              </span>
+              {node.id === "node-root-inicio" ? (
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide bg-indigo-100 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-400">
+                  Início
+                </span>
+              ) : (
+                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded tracking-wide ${node.type === "decision"
+                    ? "bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-450"
+                    : "bg-zinc-100 text-zinc-850 dark:bg-zinc-800 dark:text-zinc-350"
+                  }`}>
+                  {node.type === "decision" ? "Decisão" : "Resultado"}
+                </span>
+              )}
               <GitFork className="h-3 w-3 text-zinc-400" />
             </div>
 
